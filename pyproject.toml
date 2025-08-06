@@ -14,7 +14,15 @@ authors = [
 ]
 
 dependencies = [
+    "numpy",
     "pyqt6",
+    "superqt[iconify]",
+    "cellpose",
+    "tifffile",
+    "matplotlib",
+    "scipy",
+    "pandas",
+    "scikit-image",
 ]
 
 [project.scripts]

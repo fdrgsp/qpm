@@ -1,3 +1,4 @@
+from __future__ import annotations
 from PyQt6.QtWidgets import QApplication
 from qpm._qpm import QPMWidget
 import sys
