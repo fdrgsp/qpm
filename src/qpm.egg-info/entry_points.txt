@@ -1,0 +1,2 @@
+[console_scripts]
+qpm = qpm.__main__:main

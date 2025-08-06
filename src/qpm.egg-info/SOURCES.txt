@@ -1,0 +1,11 @@
+README.md
+pyproject.toml
+src/qpm/__init__.py
+src/qpm/_gui.py
+src/qpm/main.py
+src/qpm.egg-info/PKG-INFO
+src/qpm.egg-info/SOURCES.txt
+src/qpm.egg-info/dependency_links.txt
+src/qpm.egg-info/entry_points.txt
+src/qpm.egg-info/requires.txt
+src/qpm.egg-info/top_level.txt
