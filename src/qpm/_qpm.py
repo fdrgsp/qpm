@@ -145,14 +145,30 @@ class QPMWidget(QWidget):
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
 
+        # analysis 
+        analysis_wdg = QWidget(self)
+        a_lbl = QLabel("Analysis to perform:", self)
+        a_lbl.setFixedWidth(fixed_w)
+        self._segment_cbox = QCheckBox("Segmentation", self)
+        self._segment_cbox.setChecked(True)
+        self._qpm_reconstruct_cbox = QCheckBox("QPM Reconstruction", self)
+        self._qpm_reconstruct_cbox.setChecked(True)
+        analysis_layout = QHBoxLayout(analysis_wdg)
+        analysis_layout.setContentsMargins(0, 0, 0, 0)
+        analysis_layout.setSpacing(10)
+        analysis_layout.addWidget(a_lbl)
+        analysis_layout.addWidget(self._segment_cbox)
+        analysis_layout.addWidget(self._qpm_reconstruct_cbox)
+        analysis_layout.addStretch()
+
+        # bottom widget
         # progress bar
         self._progress_bar = QProgressBar(self)
         self._progress_bar.setTextVisible(True)
         # self._progress_bar.setVisible(False)
         self._progress_bar.setStyleSheet(BAR_STYLESHEET)
         self._progress_bar.setFixedHeight(15)
-
-        # bottom widget
+        # buttons
         run_btn = QPushButton("Run")
         run_btn.setIcon(QIconifyIcon("mdi:play", color=GREEN))
         cancel_btn = QPushButton("Cancel")
@@ -183,9 +199,11 @@ class QPMWidget(QWidget):
         main_layout.addWidget(self._num_channels)
         main_layout.addWidget(rotation_wdg)
         main_layout.addWidget(invert_ph)
-        main_layout.addWidget(create_divider_line("Tikhonov Settings"))
+        main_layout.addWidget(create_divider_line("QPM Tikhonov Settings"))
         main_layout.addWidget(self._tikhonov_abs)
         main_layout.addWidget(self._tikhonov_ph)
+        main_layout.addWidget(create_divider_line("Analysis"))
+        main_layout.addWidget(analysis_wdg)
         main_layout.addWidget(create_divider_line())
         main_layout.addLayout(btns_layout)
 
@@ -261,9 +279,13 @@ class QPMWidget(QWidget):
                 output_dir = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
                 output_dir.mkdir(parents=True, exist_ok=True)
 
-                # seg = self._segment_file(image, name)
-                ph = self._reconstruct_qpm(image, name, rotations)
-                # self._generate_csv_file(seg, ph, name)
+                ph, seg = None, None
+                if self._qpm_reconstruct_cbox.isChecked():
+                    ph = self._reconstruct_qpm(image, name, rotations)
+                if self._segment_cbox.isChecked():
+                    seg = self._segment_file(image, name)
+                if ph is not None and seg is not None:
+                    self._generate_csv_file(seg, ph, name)
 
                 current_file += 1
                 yield {"type": "update", "current": current_file}
@@ -272,9 +294,13 @@ class QPMWidget(QWidget):
                 for tif_file in item.glob("*.tif"):
                     self._dpc_solver = None
                     image = tifffile.imread(tif_file)
-                    # seg = self._segment_file(image, tif_file.stem)
-                    ph = self._reconstruct_qpm(image, tif_file.stem, rotations)
-                    # self._generate_csv_file(seg, ph, tif_file.stem)
+                    ph, seg = None, None
+                    if self._qpm_reconstruct_cbox.isChecked():
+                        ph = self._reconstruct_qpm(image, tif_file.stem, rotations)
+                    if self._segment_cbox.isChecked():
+                        seg = self._segment_file(image, tif_file.stem)
+                    if ph is not None and seg is not None:
+                        self._generate_csv_file(seg, ph, tif_file.stem)
 
                     current_file += 1
                     yield {"type": "update", "current": current_file}
