@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
     QLabel,
+    QCheckBox,
 )
 import numpy as np
 import pandas as pd
@@ -80,14 +81,25 @@ class QPMWidget(QWidget):
             "Rotation angles for each illumination channel, in degrees.\n"
             "Comma-separated values, e.g., '180, 90, 270, 0' for 4 angles."
         )
-        lbl = QLabel("Rotation (deg):", self)
+        r_lbl = QLabel("Rotation (deg):", self)
         self._rotation = QLineEdit(self)
         self._rotation.setText("180, 90, 270, 0")  # default for 4 angles
         rotation_wdg_layout = QHBoxLayout(rotation_wdg)
         rotation_wdg_layout.setContentsMargins(0, 0, 0, 0)
         rotation_wdg_layout.setSpacing(5)
-        rotation_wdg_layout.addWidget(lbl)
+        rotation_wdg_layout.addWidget(r_lbl)
         rotation_wdg_layout.addWidget(self._rotation)
+
+        invert_ph = QWidget(self)
+        invert_ph.setToolTip("Invert the phase sign after reconstruction.")
+        i_lbl = QLabel("Invert Phase:", self)
+        self._invert_ph = QCheckBox(self)
+        self._invert_ph.setChecked(False)
+        invert_ph_layout = QHBoxLayout(invert_ph)
+        invert_ph_layout.setContentsMargins(0, 0, 0, 0)
+        invert_ph_layout.setSpacing(5)
+        invert_ph_layout.addWidget(i_lbl)
+        invert_ph_layout.addWidget(self._invert_ph)
 
         # tikhonov settings
         self._tikhonov_abs = QPMSettingsSpinBox("Tikhonov reg_u:", parent=self)
@@ -112,7 +124,8 @@ class QPMWidget(QWidget):
             widget._label.setFixedWidth(fixed_w)
         self._input_dir._label.setFixedWidth(fixed_w)
         self._output_dir._label.setFixedWidth(fixed_w)
-        lbl.setFixedWidth(fixed_w)
+        r_lbl.setFixedWidth(fixed_w)
+        i_lbl.setFixedWidth(fixed_w)
 
         # buttons widget
         run_btn = QPushButton("Run")
@@ -143,6 +156,7 @@ class QPMWidget(QWidget):
         main_layout.addWidget(self._cam_pixel_size)
         main_layout.addWidget(self._num_channels)
         main_layout.addWidget(rotation_wdg)
+        main_layout.addWidget(invert_ph)
         main_layout.addWidget(create_divider_line("Tikhonov Settings"))
         main_layout.addWidget(self._tikhonov_abs)
         main_layout.addWidget(self._tikhonov_ph)
@@ -268,12 +282,11 @@ class QPMWidget(QWidget):
 
         print("Saving QPM results...")
         output_dir = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
-        tifffile.imwrite(
-            output_dir / f"frame_{name}_abs.tif",
-            dpc_result[0].real.astype("float32"),
-            imagej=True,
-        )
+        abs = dpc_result[0].real.astype("float32")
         ph = dpc_result[0].imag.astype("float32")
+        if self._invert_ph.isChecked():
+            ph = -ph
+        tifffile.imwrite(output_dir / f"frame_{name}_abs.tif", abs, imagej=True)
         tifffile.imwrite(output_dir / f"frame_{name}_ph.tif", ph, imagej=True)
         print(f"Saved QPM results for {name}")
         return ph
