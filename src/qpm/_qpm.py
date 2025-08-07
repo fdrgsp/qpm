@@ -9,10 +9,13 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QLabel,
     QCheckBox,
+    QProgressBar,
 )
+from PyQt6.QtCore import Qt
 import numpy as np
 import pandas as pd
 import skimage
+from typing import Generator
 from ._util import (
     BrowseWidget,
     QPMSettingsSpinBox,
@@ -24,10 +27,23 @@ from superqt import QIconifyIcon
 from ._segmentation import CellposeSAMSegmentation
 import tifffile
 from cellpose import io
+from superqt.utils import create_worker, GeneratorWorker, FunctionWorker
 
 RED = "#C33"
 GREEN = "#00FF00"
 PROCESSED = "_processed"
+
+BAR_STYLESHEET = """
+    QProgressBar {
+        border: 1px solid grey;
+        border-radius: 5px;
+        text-align: center;
+    }
+    QProgressBar::chunk {
+        background-color: #00FF00;
+        border-radius: 3px;
+    }
+"""
 
 
 class QPMWidget(QWidget):
@@ -38,6 +54,8 @@ class QPMWidget(QWidget):
 
         self.setWindowTitle("QPM Widget")
         self.resize(600, 400)
+
+        self._worker: FunctionWorker | GeneratorWorker | None = None
 
         self._dpc_solver: DPCSolver | None = None
 
@@ -127,7 +145,14 @@ class QPMWidget(QWidget):
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
 
-        # buttons widget
+        # progress bar
+        self._progress_bar = QProgressBar(self)
+        self._progress_bar.setTextVisible(True)
+        # self._progress_bar.setVisible(False)
+        self._progress_bar.setStyleSheet(BAR_STYLESHEET)
+        self._progress_bar.setFixedHeight(15)
+
+        # bottom widget
         run_btn = QPushButton("Run")
         run_btn.setIcon(QIconifyIcon("mdi:play", color=GREEN))
         cancel_btn = QPushButton("Cancel")
@@ -135,9 +160,10 @@ class QPMWidget(QWidget):
         btns_layout = QHBoxLayout()
         btns_layout.setContentsMargins(0, 0, 0, 0)
         btns_layout.setSpacing(5)
-        btns_layout.addStretch()
+        btns_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         btns_layout.addWidget(run_btn)
         btns_layout.addWidget(cancel_btn)
+        btns_layout.addWidget(self._progress_bar)
         run_btn.clicked.connect(self.run)
         cancel_btn.clicked.connect(self.cancel)
 
@@ -170,9 +196,40 @@ class QPMWidget(QWidget):
 
     def cancel(self) -> None:
         """Cancel the QPM processing."""
-        ...
+        if self._worker is None or not self._worker.is_running:
+            return
+        self._worker.quit()
 
     def run(self) -> None:
+        """Run the QPM processing in a separate thread."""
+        self._worker = create_worker(
+            self._run,
+            _start_thread=True,
+            _connect={
+                "yielded": self._update_progress,
+                "finished": self._on_processing_finished,
+            },
+        )
+
+    def _update_progress(self, progress_data: dict) -> None:
+        """Update the progress bar."""
+        if progress_data["type"] == "init":
+            self._progress_bar.setMaximum(progress_data["total"])
+            self._progress_bar.setValue(0)
+            self._progress_bar.setFormat(f"0/{progress_data['total']}")
+            self._progress_bar.setVisible(True)
+        elif progress_data["type"] == "update":
+            current = progress_data["current"]
+            total = self._progress_bar.maximum()
+            self._progress_bar.setValue(current)
+            self._progress_bar.setFormat(f"{current}/{total}")
+
+    def _on_processing_finished(self) -> None:
+        """Called when processing is finished."""
+        # self._progress_bar.setVisible(False)
+        print("Processing completed!")
+
+    def _run(self) -> Generator[dict, None, None]:
         """Run the QPM processing."""
         if not self._input_dir.value():
             return
@@ -183,11 +240,18 @@ class QPMWidget(QWidget):
 
         rotations = self._parse_rotation()
 
+        num_files = self._get_total_number_of_files()
+
+        # Initialize progress bar
+        yield {"type": "init", "total": num_files}
+
         # understand if the solver should be initialized at each image or not
         # self._dpc_solver = None
 
+        current_file = 0
         path = Path(self._input_dir.value())
         for item in path.iterdir():
+
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
                 self._dpc_solver = None
                 image = tifffile.imread(item)
@@ -197,18 +261,23 @@ class QPMWidget(QWidget):
                 output_dir = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
                 output_dir.mkdir(parents=True, exist_ok=True)
 
-                seg = self._segment_file(image, name)
+                # seg = self._segment_file(image, name)
                 ph = self._reconstruct_qpm(image, name, rotations)
-                self._generate_csv_file(seg, ph, name)
+                # self._generate_csv_file(seg, ph, name)
+
+                current_file += 1
+                yield {"type": "update", "current": current_file}
+
             elif item.is_dir():
                 for tif_file in item.glob("*.tif"):
                     self._dpc_solver = None
                     image = tifffile.imread(tif_file)
-                    seg = self._segment_file(image, tif_file.stem)
+                    # seg = self._segment_file(image, tif_file.stem)
                     ph = self._reconstruct_qpm(image, tif_file.stem, rotations)
-                    self._generate_csv_file(seg, ph, tif_file.stem)
+                    # self._generate_csv_file(seg, ph, tif_file.stem)
 
-        print("Processing completed!")
+                    current_file += 1
+                    yield {"type": "update", "current": current_file}
 
     def _parse_rotation(self) -> list[float]:
         """Parse the rotation angles from the input."""
@@ -217,6 +286,17 @@ class QPMWidget(QWidget):
         except ValueError:
             show_error_dialog(self, "Invalid rotation angles format.")
             return []
+
+    def _get_total_number_of_files(self) -> int:
+        """Get the total number of files to process."""
+        path = Path(self._input_dir.value())
+        total_files = 0
+        for item in path.iterdir():
+            if item.is_file() and item.suffix in {".tif", ".tiff"}:
+                total_files += 1
+            elif item.is_dir():
+                total_files += len(list(item.glob("*.tif")))
+        return total_files
 
     def _segment_file(self, image: np.ndarray, name: str) -> np.ndarray:
         """Process a single TIF file."""
@@ -253,7 +333,10 @@ class QPMWidget(QWidget):
     def _reconstruct_qpm(
         self, image: np.ndarray, name: str, rotations: list[float]
     ) -> np.ndarray:
-        """Reconstruct the QPM image."""
+        """Reconstruct the QPM image.
+
+        Code form Laura Waller Lab: https://github.com/Waller-Lab/DPC/tree/master/python_code
+        """
         print(f"Reconstructing QPM for {name}...")
 
         if self._dpc_solver is None:
