@@ -45,6 +45,8 @@ BAR_STYLESHEET = """
     }
 """
 
+TEST_DATA = Path(__file__).parent / "_test_data"
+
 
 class QPMWidget(QWidget):
     """The QPM widget."""
@@ -80,19 +82,24 @@ class QPMWidget(QWidget):
         self._wav = QPMSettingsSpinBox("Wavelength (µm):", parent=self)
         self._wav.setDecimals(3)
         self._wav.setValue(0.530)
+
         self._mag = QPMSettingsSpinBox("Magnification:", parent=self)
         self._mag.setValue(40)
+
         self._na = QPMSettingsSpinBox("Numerical Aperture:", parent=self)
         self._na.setValue(0.75)
+
         self._na_in = QPMSettingsSpinBox("Numerical Aperture (In):", parent=self)
         self._na_in.setValue(0.0)
+
         self._cam_pixel_size = QPMSettingsSpinBox(
             "Camera Pixel Size (µm):", parent=self
         )
         self._cam_pixel_size.setValue(6.5)
-        self._num_channels = QPMSettingsSpinBox("Number of Channels:", parent=self)
-        self._num_channels.setDecimals(0)
-        self._num_channels.setValue(4)
+
+        # self._num_channels = QPMSettingsSpinBox("Number of Channels:", parent=self)
+        # self._num_channels.setDecimals(0)
+        # self._num_channels.setValue(4)
 
         rotation_wdg = QWidget(self)
         rotation_wdg.setToolTip(
@@ -135,7 +142,7 @@ class QPMWidget(QWidget):
             self._na,
             self._na_in,
             self._cam_pixel_size,
-            self._num_channels,
+            # self._num_channels,
             self._tikhonov_abs,
             self._tikhonov_ph,
         ]:
@@ -145,7 +152,7 @@ class QPMWidget(QWidget):
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
 
-        # analysis 
+        # analysis
         analysis_wdg = QWidget(self)
         a_lbl = QLabel("Analysis to perform:", self)
         a_lbl.setFixedWidth(fixed_w)
@@ -196,7 +203,7 @@ class QPMWidget(QWidget):
         main_layout.addWidget(self._na)
         main_layout.addWidget(self._na_in)
         main_layout.addWidget(self._cam_pixel_size)
-        main_layout.addWidget(self._num_channels)
+        # main_layout.addWidget(self._num_channels)
         main_layout.addWidget(rotation_wdg)
         main_layout.addWidget(invert_ph)
         main_layout.addWidget(create_divider_line("QPM Tikhonov Settings"))
@@ -208,8 +215,10 @@ class QPMWidget(QWidget):
         main_layout.addLayout(btns_layout)
 
         # TO REMOVE, JUST FOR TESTING
-        self._input_dir.setValue("/Users/fdrgsp/Desktop/qpm/test")
-        self._output_dir.setValue("/Users/fdrgsp/Desktop/t")
+        input = TEST_DATA / "input"
+        output = TEST_DATA / "output"
+        self._input_dir.setValue(input)
+        self._output_dir.setValue(output)
         # END TO REMOVE
 
     def cancel(self) -> None:
@@ -271,39 +280,63 @@ class QPMWidget(QWidget):
         for item in path.iterdir():
 
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
-                self._dpc_solver = None
+                name = item.stem.replace(".ome", "")
+
                 image = tifffile.imread(item)
 
-                # create folder for the results
-                name = item.stem.replace(".ome", "")
-                output_dir = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
-                output_dir.mkdir(parents=True, exist_ok=True)
+                if not self._validate_image(image):
+                    continue
+
+                out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
+                out.mkdir(parents=True, exist_ok=True)
 
                 ph, seg = None, None
                 if self._qpm_reconstruct_cbox.isChecked():
-                    ph = self._reconstruct_qpm(image, name, rotations)
+                    self._dpc_solver = None
+                    ph = self._reconstruct_qpm(image, name, rotations, out)
                 if self._segment_cbox.isChecked():
-                    seg = self._segment_file(image, name)
+                    seg = self._segment_file(image, name, out)
                 if ph is not None and seg is not None:
-                    self._generate_csv_file(seg, ph, name)
+                    self._generate_csv_file(seg, ph, name, out)
 
                 current_file += 1
                 yield {"type": "update", "current": current_file}
 
             elif item.is_dir():
                 for tif_file in item.glob("*.tif"):
-                    self._dpc_solver = None
+                    name = tif_file.stem.replace(".ome", "")
+
                     image = tifffile.imread(tif_file)
+
+                    if not self._validate_image(image):
+                        continue
+
+                    out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
+                    out.mkdir(parents=True, exist_ok=True)
+
                     ph, seg = None, None
                     if self._qpm_reconstruct_cbox.isChecked():
-                        ph = self._reconstruct_qpm(image, tif_file.stem, rotations)
+                        self._dpc_solver = None
+                        ph = self._reconstruct_qpm(image, tif_file.stem, rotations, out)
                     if self._segment_cbox.isChecked():
-                        seg = self._segment_file(image, tif_file.stem)
+                        seg = self._segment_file(image, tif_file.stem, out)
                     if ph is not None and seg is not None:
-                        self._generate_csv_file(seg, ph, tif_file.stem)
+                        self._generate_csv_file(seg, ph, tif_file.stem, out)
 
                     current_file += 1
                     yield {"type": "update", "current": current_file}
+
+    def _validate_image(self, image: np.ndarray) -> bool:
+        """Validate the input image."""
+        if image.ndim != 3:
+            show_error_dialog(self, "The file should have 3 dimensions (C, H, W).")
+            return False
+        if image.shape[0] != 4:
+            show_error_dialog(
+                self, "The file should have 4 channels, one per illumination angle."
+            )
+            return False
+        return True
 
     def _parse_rotation(self) -> list[float]:
         """Parse the rotation angles from the input."""
@@ -324,13 +357,11 @@ class QPMWidget(QWidget):
                 total_files += len(list(item.glob("*.tif")))
         return total_files
 
-    def _segment_file(self, image: np.ndarray, name: str) -> np.ndarray:
+    def _segment_file(
+        self, image: np.ndarray, name: str, output_dir: Path
+    ) -> np.ndarray:
         """Process a single TIF file."""
         print(f"\nProcessing {name}...")
-        assert image.ndim == 3, "The file should have 3 dimensions (C, H, W)."
-        assert (
-            image.shape[0] == 4
-        ), "The file should have 4 channels, one per illumination angle."
 
         # run segmentation
         print("Running CellposeSAM segmentation...")
@@ -339,7 +370,6 @@ class QPMWidget(QWidget):
 
         # save the labels
         print("Saving labels...")
-        output_dir = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
         io.imsave(output_dir / f"{name}_labels.tif", labels)
         io.imsave(output_dir / f"{name}_max.tif", max_image)
         # This I would remove later on or make it optional.
@@ -357,7 +387,7 @@ class QPMWidget(QWidget):
         return labels
 
     def _reconstruct_qpm(
-        self, image: np.ndarray, name: str, rotations: list[float]
+        self, image: np.ndarray, name: str, rotations: list[float], output_dir: Path
     ) -> np.ndarray:
         """Reconstruct the QPM image.
 
@@ -374,7 +404,8 @@ class QPMWidget(QWidget):
                 self._na_in.value(),
                 self._cam_pixel_size.value() / self._mag.value(),
                 rotations,
-                dpc_num=int(self._num_channels.value()),
+                # dpc_num=int(self._num_channels.value()),
+                dpc_num=4,
             )
         else:
             self._dpc_solver.set_dpc_imgs(image)
@@ -390,7 +421,6 @@ class QPMWidget(QWidget):
         dpc_result = self._dpc_solver.solve(method="Tikhonov")
 
         print("Saving QPM results...")
-        output_dir = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
         abs = dpc_result[0].real.astype("float32")
         ph = dpc_result[0].imag.astype("float32")
         if self._invert_ph.isChecked():
@@ -401,7 +431,7 @@ class QPMWidget(QWidget):
         return ph
 
     def _generate_csv_file(
-        self, labels: np.ndarray, phase_image: np.ndarray, name: str
+        self, labels: np.ndarray, phase_image: np.ndarray, name: str, output_dir: Path
     ) -> None:
         """Generate a CSV file with measurements."""
         name = name.replace(".ome", "")
@@ -421,7 +451,6 @@ class QPMWidget(QWidget):
         )
         props_df = pd.DataFrame(props_dict)
         print(f"Saving CSV file for {name}...")
-        output_dir = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
         props_df.to_csv(output_dir / f"{name}_measurements.csv", index=False)
         print(f"Saved CSV file for {name}")
 
