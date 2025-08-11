@@ -58,6 +58,7 @@ class QPMWidget(QWidget):
         self.resize(600, 400)
 
         self._worker: FunctionWorker | GeneratorWorker | None = None
+        self._cancel_requested: bool = False
 
         self._dpc_solver: DPCSolver | None = None
 
@@ -172,7 +173,6 @@ class QPMWidget(QWidget):
         # progress bar
         self._progress_bar = QProgressBar(self)
         self._progress_bar.setTextVisible(True)
-        # self._progress_bar.setVisible(False)
         self._progress_bar.setStyleSheet(BAR_STYLESHEET)
         self._progress_bar.setFixedHeight(15)
         # buttons
@@ -225,16 +225,22 @@ class QPMWidget(QWidget):
         """Cancel the QPM processing."""
         if self._worker is None or not self._worker.is_running:
             return
+        self._cancel_requested = True
         self._worker.quit()
+        # clear the progress bar
+        self._progress_bar.setValue(0)
+        self._progress_bar.setFormat("")
 
     def run(self) -> None:
         """Run the QPM processing in a separate thread."""
+        self._cancel_requested = False
         self._worker = create_worker(
             self._run,
             _start_thread=True,
             _connect={
                 "yielded": self._update_progress,
                 "finished": self._on_processing_finished,
+                "error": self._on_error,
             },
         )
 
@@ -253,8 +259,16 @@ class QPMWidget(QWidget):
 
     def _on_processing_finished(self) -> None:
         """Called when processing is finished."""
-        # self._progress_bar.setVisible(False)
+        self._cancel_requested = False
         print("Processing completed!")
+
+    def _on_error(self) -> None:
+        """Called when an error occurs during processing."""
+        self._cancel_requested = False
+        print("Processing failed!")
+        # clear the progress bar
+        self._progress_bar.setValue(0)
+        self._progress_bar.setFormat("")
 
     def _run(self) -> Generator[dict, None, None]:
         """Run the QPM processing."""
@@ -264,7 +278,7 @@ class QPMWidget(QWidget):
         if not self._output_dir.value():
             show_error_dialog(self, "Output directory is not set.")
             return
-
+            
         rotations = self._parse_rotation()
 
         num_files = self._get_total_number_of_files()
@@ -278,6 +292,9 @@ class QPMWidget(QWidget):
         current_file = 0
         path = Path(self._input_dir.value())
         for item in path.iterdir():
+
+            if self._cancel_requested:
+                return
 
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
                 name = item.stem.replace(".ome", "")
@@ -359,9 +376,12 @@ class QPMWidget(QWidget):
 
     def _segment_file(
         self, image: np.ndarray, name: str, output_dir: Path
-    ) -> np.ndarray:
+    ) -> np.ndarray | None:
         """Process a single TIF file."""
         print(f"\nProcessing {name}...")
+
+        if self._cancel_requested:
+            return None
 
         # run segmentation
         print("Running CellposeSAM segmentation...")
@@ -388,7 +408,7 @@ class QPMWidget(QWidget):
 
     def _reconstruct_qpm(
         self, image: np.ndarray, name: str, rotations: list[float], output_dir: Path
-    ) -> np.ndarray:
+    ) -> np.ndarray | None:
         """Reconstruct the QPM image.
 
         Code form Laura Waller Lab: https://github.com/Waller-Lab/DPC/tree/master/python_code
@@ -410,6 +430,9 @@ class QPMWidget(QWidget):
         else:
             self._dpc_solver.set_dpc_imgs(image)
             self._dpc_solver.normalization()
+
+        if self._cancel_requested:
+            return None
 
         # solve DPC Deconvoltion Problems
         # parameters for Tikhonov regurlarization [u:absorption, p:phase]
@@ -436,6 +459,9 @@ class QPMWidget(QWidget):
         """Generate a CSV file with measurements."""
         name = name.replace(".ome", "")
         print(f"Generating CSV file for {name}...")
+
+        if self._cancel_requested:
+            return None
 
         props_dict = skimage.measure.regionprops_table(
             labels,
