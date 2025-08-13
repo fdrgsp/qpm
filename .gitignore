@@ -3,3 +3,4 @@
 uv.lock
 output
 .pyc
+__pycache__
