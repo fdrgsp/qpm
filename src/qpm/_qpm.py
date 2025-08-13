@@ -165,8 +165,8 @@ class QPMWidget(QWidget):
         analysis_layout.setContentsMargins(0, 0, 0, 0)
         analysis_layout.setSpacing(10)
         analysis_layout.addWidget(a_lbl)
-        analysis_layout.addWidget(self._segment_cbox)
         analysis_layout.addWidget(self._qpm_reconstruct_cbox)
+        analysis_layout.addWidget(self._segment_cbox)
         analysis_layout.addStretch()
 
         # bottom widget
