@@ -240,7 +240,7 @@ class QPMWidget(QWidget):
             _connect={
                 "yielded": self._update_progress,
                 "finished": self._on_processing_finished,
-                "error": self._on_error,
+                "errored": self._on_error,
             },
         )
 
