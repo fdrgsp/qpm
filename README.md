@@ -23,4 +23,4 @@ NOTE: [NVIDIA Drivers](https://www.nvidia.com/en-us/drivers/) should be already 
 - `qpm-env\Scripts\activate`
 - `uv pip install .`
 - `uv pip install -U torch torchvision --index-url https://download.pytorch.org/whl/cu126`
-- run the gui with: `qpm`
+- launch the GUI with: `qpm`
