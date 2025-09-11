@@ -312,7 +312,7 @@ class QPMWidget(QWidget):
                     self._dpc_solver = None
                     ph = self._reconstruct_qpm(image, name, rotations, out)
                 if self._segment_cbox.isChecked():
-                    seg = self._segment_file(image, name, out)
+                    seg = self._segment_file(ph, name, out)
                 if ph is not None and seg is not None:
                     self._generate_csv_file(seg, ph, name, out)
 
@@ -336,7 +336,7 @@ class QPMWidget(QWidget):
                         self._dpc_solver = None
                         ph = self._reconstruct_qpm(image, tif_file.stem, rotations, out)
                     if self._segment_cbox.isChecked():
-                        seg = self._segment_file(image, tif_file.stem, out)
+                        seg = self._segment_file(ph, tif_file.stem, out)
                     if ph is not None and seg is not None:
                         self._generate_csv_file(seg, ph, tif_file.stem, out)
 
@@ -375,9 +375,12 @@ class QPMWidget(QWidget):
         return total_files
 
     def _segment_file(
-        self, image: np.ndarray, name: str, output_dir: Path
+        self, image: np.ndarray | None, name: str, output_dir: Path
     ) -> np.ndarray | None:
         """Process a single TIF file."""
+        if image is None:
+            return None
+
         print(f"\nProcessing {name}...")
 
         if self._cancel_requested:
@@ -385,16 +388,15 @@ class QPMWidget(QWidget):
 
         # run segmentation
         print("Running CellposeSAM segmentation...")
-        max_image = np.max(image, axis=0)
-        labels, _ = self._cp.eval(max_image)
+        labels, _ = self._cp.eval(image)
 
         # save the labels
         print("Saving labels...")
         io.imsave(output_dir / f"{name}_labels.tif", labels)
-        io.imsave(output_dir / f"{name}_max.tif", max_image)
+        io.imsave(output_dir / f"{name}_max.tif", image)
         # This I would remove later on or make it optional.
         fig, ax = plt.subplots(1, 2, figsize=(8, 4))
-        ax[0].imshow(max_image, cmap="gray")
+        ax[0].imshow(image, cmap="gray")
         ax[0].set_title("Raw Max Projection")
         ax[0].axis("off")
         ax[1].imshow(labels, cmap="nipy_spectral")
