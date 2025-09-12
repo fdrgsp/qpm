@@ -585,7 +585,7 @@ class QPMWidget(QWidget):
                     out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
                     out.mkdir(parents=True, exist_ok=True)
 
-                    self._segment_file(image, tif_file.stem, out)
+                    self._segment_file(image, name, out)
                     # TODO: add any measurements/csv generation if needed
 
                     current_file += 1
