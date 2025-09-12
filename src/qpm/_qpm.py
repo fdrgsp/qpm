@@ -3,6 +3,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from PyQt6.QtWidgets import (
     QWidget,
+    QTabWidget,
     QVBoxLayout,
     QPushButton,
     QHBoxLayout,
@@ -79,10 +80,18 @@ class QPMWidget(QWidget):
             is_dir=True,
         )
 
+        self.tabs = QTabWidget() # TODO: Maria
+        self._random = QPMSettingsSpinBox("asdfasdf", parent=self)
+        self._random.setDecimals(3)
+
+        self._random.setValue(42)
+
         # qpm settings
         self._wav = QPMSettingsSpinBox("Wavelength (µm):", parent=self)
         self._wav.setDecimals(3)
         self._wav.setValue(0.530)
+
+
 
         self._mag = QPMSettingsSpinBox("Magnification:", parent=self)
         self._mag.setValue(40)
@@ -139,6 +148,7 @@ class QPMWidget(QWidget):
         fixed_w = self._na_in._label.sizeHint().width()
         for widget in [
             self._wav,
+            self._random,
             self._mag,
             self._na,
             self._na_in,
@@ -197,8 +207,10 @@ class QPMWidget(QWidget):
         main_layout.addWidget(create_divider_line("Input/Output Directories"))
         main_layout.addWidget(self._input_dir)
         main_layout.addWidget(self._output_dir)
+        #main_layout.addWidget(self.tabs) # TODO: Maria
         main_layout.addWidget(create_divider_line("QPM Settings"))
         main_layout.addWidget(self._wav)
+        main_layout.addWidget(self._random)
         main_layout.addWidget(self._mag)
         main_layout.addWidget(self._na)
         main_layout.addWidget(self._na_in)
