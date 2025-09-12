@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QCheckBox,
     QProgressBar,
-    QTabWidget
+    QTabWidget,
 )
 from PyQt6.QtCore import Qt
 import numpy as np
@@ -233,7 +233,7 @@ class QPMWidget(QWidget):
         phase_layout.setContentsMargins(5, 20, 5, 10)
         phase_layout.setSpacing(5)
         phase_layout.addWidget(phase_lbl)
-        phase_layout.addStretch()   
+        phase_layout.addStretch()
 
         # main layout
         main_layout = QVBoxLayout(self)
@@ -290,7 +290,6 @@ class QPMWidget(QWidget):
                 },
             )
 
-
     def _update_progress(self, progress_data: dict) -> None:
         """Update the progress bar."""
         if progress_data["type"] == "init":
@@ -331,40 +330,40 @@ class QPMWidget(QWidget):
             elif item.is_dir():
                 total_files += len(list(item.glob("*.tif")))
         return total_files
-    
+
     def _segment_file(
-            self, image: np.ndarray | None, name: str, output_dir: Path
-        ) -> np.ndarray | None:
-            """Process a single TIF file."""
-            if image is None:
-                return None
+        self, image: np.ndarray | None, name: str, output_dir: Path
+    ) -> np.ndarray | None:
+        """Process a single TIF file."""
+        if image is None:
+            return None
 
-            print(f"\nProcessing {name}...")
+        print(f"\nProcessing {name}...")
 
-            if self._cancel_requested:
-                return None
+        if self._cancel_requested:
+            return None
 
-            # run segmentation
-            print("Running CellposeSAM segmentation...")
-            labels, _ = self._cp.eval(image)
+        # run segmentation
+        print("Running CellposeSAM segmentation...")
+        labels, _ = self._cp.eval(image)
 
-            # save the labels
-            print("Saving labels...")
-            io.imsave(output_dir / f"{name}_labels.tif", labels)
-            io.imsave(output_dir / f"{name}_max.tif", image)
-            # This I would remove later on or make it optional.
-            fig, ax = plt.subplots(1, 2, figsize=(8, 4))
-            ax[0].imshow(image, cmap="gray")
-            ax[0].set_title("Raw Max Projection")
-            ax[0].axis("off")
-            ax[1].imshow(labels, cmap="nipy_spectral")
-            ax[1].set_title("Labels")
-            ax[1].axis("off")
-            plt.tight_layout()
-            plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
-            plt.close()
-            print(f"Saved labels for {name}")
-            return labels
+        # save the labels
+        print("Saving labels...")
+        io.imsave(output_dir / f"{name}_labels.tif", labels)
+        io.imsave(output_dir / f"{name}_max.tif", image)
+        # This I would remove later on or make it optional.
+        fig, ax = plt.subplots(1, 2, figsize=(8, 4))
+        ax[0].imshow(image, cmap="gray")
+        ax[0].set_title("Raw Max Projection")
+        ax[0].axis("off")
+        ax[1].imshow(labels, cmap="nipy_spectral")
+        ax[1].set_title("Labels")
+        ax[1].axis("off")
+        plt.tight_layout()
+        plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
+        plt.close()
+        print(f"Saved labels for {name}")
+        return labels
 
     # QPM PROCESSING METHODS-------------------------------------------------------
 
@@ -376,7 +375,7 @@ class QPMWidget(QWidget):
         if not self._output_dir.value():
             yield {"type": "error", "message": "Output directory is not set."}
             return
-            
+
         rotations = self._parse_rotation()
         if not rotations:
             yield {"type": "error", "message": "Invalid rotation angles format."}
@@ -455,12 +454,14 @@ class QPMWidget(QWidget):
 
         # Report failed files at the end
         if failed_files:
-            error_message = "The following files failed validation:\n\n" + "\n".join(failed_files)
+            error_message = "The following files failed validation:\n\n" + "\n".join(
+                failed_files
+            )
             yield {"type": "validation_errors", "message": error_message}
 
     def _validate_qpm_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image.
-        
+
         Returns:
             tuple: (is_valid, error_message)
         """
@@ -534,7 +535,7 @@ class QPMWidget(QWidget):
         if not self._output_dir.value():
             yield {"type": "error", "message": "Output directory is not set."}
             return
-        
+
         num_files = self._get_total_number_of_files()
         failed_files = []  # Collect failed files
 
@@ -547,7 +548,7 @@ class QPMWidget(QWidget):
 
             if self._cancel_requested:
                 return
-            
+
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
                 name = item.stem.replace(".ome", "")
 
@@ -593,17 +594,22 @@ class QPMWidget(QWidget):
 
         # Report failed files at the end
         if failed_files:
-            error_message = "The following files failed validation:\n\n" + "\n".join(failed_files)
+            error_message = "The following files failed validation:\n\n" + "\n".join(
+                failed_files
+            )
             yield {"type": "validation_errors", "message": error_message}
 
     def _validate_phc_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image.
-        
+
         Returns:
             tuple: (is_valid, error_message)
         """
         if image.ndim != 2:
-            return False, "The file should have 2 dimensions (H, W) for phase contrast images."
+            return (
+                False,
+                "The file should have 2 dimensions (H, W) for phase contrast images.",
+            )
         return True, ""
 
     # CSV GENERATION METHODS-------------------------------------------------------
