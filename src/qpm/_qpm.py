@@ -392,7 +392,6 @@ class QPMWidget(QWidget):
         # save the labels
         print("Saving labels...")
         io.imsave(output_dir / f"{name}_labels.tif", labels)
-        io.imsave(output_dir / f"{name}_max.tif", image)
         # This I would remove later on or make it optional.
         fig, ax = plt.subplots(1, 2, figsize=(8, 4))
         ax[0].imshow(image, cmap="gray")
