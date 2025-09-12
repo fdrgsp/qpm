@@ -16,9 +16,9 @@ uvx git+https://github.com/fdrgsp/qpm
 
 To use the GPU version of `qpm` on Windows, you need to have a compatible NVIDIA GPU and the corresponding CUDA toolkit installed.
 
-NOTE: [NVIDIA Drivers](https://www.nvidia.com/en-us/drivers/) should be already installed.
+`NOTE`: [NVIDIA Drivers](https://www.nvidia.com/en-us/drivers/) should be already installed.
 
-You need to go through the following steps only once, just the first time you install `qpm`:
+You need to go through the following steps **only once**, just the first time you install `qpm`:
 
 - download the repository (zip file)
 - extract the folder (it should contain src, .gitignore, pyproject.toml and README.md)
@@ -30,7 +30,7 @@ You need to go through the following steps only once, just the first time you in
 
   `uv pip install -U torch torchvision --index-url https://download.pytorch.org/whl/cu126`
 
-  NOTE: to get the correct URL, check the [PyTorch Get Started page](https://pytorch.org/get-started/locally/).
+  `NOTE`: to get the correct URL, check the [PyTorch Get Started page](https://pytorch.org/get-started/locally/).
 
 - launch the GUI with: `qpm`
 
