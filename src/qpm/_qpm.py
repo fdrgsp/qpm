@@ -397,7 +397,7 @@ class QPMWidget(QWidget):
         # This I would remove later on or make it optional.
         fig, ax = plt.subplots(1, 2, figsize=(8, 4))
         ax[0].imshow(image, cmap="gray")
-        ax[0].set_title("Raw Max Projection")
+        ax[0].set_title("Phase Image")
         ax[0].axis("off")
         ax[1].imshow(labels, cmap="nipy_spectral")
         ax[1].set_title("Labels")
@@ -475,14 +475,38 @@ class QPMWidget(QWidget):
                 "eccentricity",
                 "axis_major_length",
                 "axis_minor_length",
+                "intensity_sum",
             ],
         )
+        
+        # Calculate dry mass for each region using the exact formula from the
+        # paper https://pmc.ncbi.nlm.nih.gov/articles/PMC5730079/:
+        # Equation (5): M = (λ/(2π)) * (1/α) * (pixel_area) * Σ phase_values
+        # Where σ = (λ/(2π)) * (1/α) * Δφ(x,y) from Equation (4)
+        wavelength = self._wav.value() * 1e-6  # meters
+        alpha = 0.2e-3  # refractive index increment in m³/kg (0.2 mL/g from paper)
+        pixel_size_m = (self._cam_pixel_size.value() / self._mag.value()) * 1e-6  # meters
+        pixel_area_m2 = pixel_size_m ** 2  # physical area per pixel in m²
+        # calculate dry mass factor: (λ/(2π)) * (1/α) * pixel_area * conversion to picograms
+        dry_mass_factor = (wavelength / (2 * np.pi)) * (1 / alpha) * pixel_area_m2 * 1e15
+        props_dict["dry_mass"] = props_dict["intensity_sum"] * dry_mass_factor
+        
         props_df = pd.DataFrame(props_dict)
         print(f"Saving CSV file for {name}...")
         props_df.to_csv(output_dir / f"{name}_measurements.csv", index=False)
         print(f"Saved CSV file for {name}")
 
         # Temporary plots for testing
+        props_df["dry_mass"].plot(
+            kind="hist",
+            bins=200,
+            title="Dry Mass Distribution",
+            xlabel="Dry Mass (pg)",
+            ylabel="Frequency",
+        )
+        plt.savefig(output_dir / f"{name}_dry_mass_distribution.png", dpi=150)
+        plt.close()
+
         props_df["area"].plot(
             kind="hist",
             bins=200,
