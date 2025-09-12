@@ -12,15 +12,25 @@ Install [git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/
 uvx git+https://github.com/fdrgsp/qpm
 ```
 
-## Windows, GPU & CUDA
+## GPU & CUDA on Windows
 
 NOTE: [NVIDIA Drivers](https://www.nvidia.com/en-us/drivers/) should be already installed.
 
+You need to go through the following steps only once, just the first time you install qpm:
+
 - download the repository (zip file)
 - extract the folder (it should contain src, .gitignore, pyproject.toml and README.md)
-- in your terminal, cd into this folder (e.g. `cd Path/to/qpm`)
+- in your terminal, `cd` into this folder (e.g. `cd Path/to/qpm`)
 - `uv venv qpm-env`
 - `qpm-env\Scripts\activate`
 - `uv pip install .`
-- `uv pip install -U torch torchvision --index-url https://download.pytorch.org/whl/cu126`
+- update the torch and torchvision packages to the version compatible with your CUDA version, e.g. for CUDA 12.6:
+`uv pip install -U torch torchvision --index-url https://download.pytorch.org/whl/cu126`
+NOTE: to get the correct URL, check the [PyTorch Get Started page](https://pytorch.org/get-started/locally/)
 - launch the GUI with: `qpm`
+
+Once you have done this once, in the future you can simply use your terminal and run:
+
+- `cd Path/to/qpm`
+- `qpm-env\Scripts\activate`
+- `qpm`
