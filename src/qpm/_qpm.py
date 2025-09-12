@@ -278,7 +278,7 @@ class QPMWidget(QWidget):
         if not self._output_dir.value():
             show_error_dialog(self, "Output directory is not set.")
             return
-            
+
         rotations = self._parse_rotation()
 
         num_files = self._get_total_number_of_files()
@@ -292,7 +292,6 @@ class QPMWidget(QWidget):
         current_file = 0
         path = Path(self._input_dir.value())
         for item in path.iterdir():
-
             if self._cancel_requested:
                 return
 
@@ -475,22 +474,12 @@ class QPMWidget(QWidget):
                 "eccentricity",
                 "axis_major_length",
                 "axis_minor_length",
-                "intensity_sum",
             ],
         )
-        
-        # Calculate dry mass for each region using the exact formula from the
-        # paper https://pmc.ncbi.nlm.nih.gov/articles/PMC5730079/:
-        # Equation (5): M = (λ/(2π)) * (1/α) * (pixel_area) * Σ phase_values
-        # Where σ = (λ/(2π)) * (1/α) * Δφ(x,y) from Equation (4)
-        wavelength = self._wav.value() * 1e-6  # meters
-        alpha = 0.2e-3  # refractive index increment in m³/kg (0.2 mL/g from paper)
-        pixel_size_m = (self._cam_pixel_size.value() / self._mag.value()) * 1e-6  # meters
-        pixel_area_m2 = pixel_size_m ** 2  # physical area per pixel in m²
-        # calculate dry mass factor: (λ/(2π)) * (1/α) * pixel_area * conversion to picograms
-        dry_mass_factor = (wavelength / (2 * np.pi)) * (1 / alpha) * pixel_area_m2 * 1e15
-        props_dict["dry_mass"] = props_dict["intensity_sum"] * dry_mass_factor
-        
+
+        # calculate dry mass for each region and add it to the props_dict
+        self._extract_and_add_dry_mass_calculation(labels, phase_image, props_dict)
+
         props_df = pd.DataFrame(props_dict)
         print(f"Saving CSV file for {name}...")
         props_df.to_csv(output_dir / f"{name}_measurements.csv", index=False)
@@ -536,3 +525,37 @@ class QPMWidget(QWidget):
         )
         plt.savefig(output_dir / f"{name}_axis_major_length_distribution.png", dpi=150)
         plt.close()
+
+    def _extract_and_add_dry_mass_calculation(
+        self, labels: np.ndarray, phase_image: np.ndarray, props_dict: dict
+    ) -> None:
+        """Extract intensity sum and calculate dry mass for each region.
+
+        Based on the formula from the paper:
+        - https://pmc.ncbi.nlm.nih.gov/articles/PMC5730079/
+        - dry mass M = (λ/(2π)) * (1/α) * (pixel_area) * Σ phase_values
+        """
+        props = skimage.measure.regionprops(labels, intensity_image=phase_image)
+        intensity_sums = []
+        for region in props:
+            region_mask = region.image
+            region_intensity = region.image_intensity
+            intensity_sum = np.sum(region_intensity[region_mask])
+            intensity_sums.append(intensity_sum)
+
+        props_dict["intensity_sum"] = np.array(intensity_sums)
+
+        # calculate dry mass for each region using the exact formula from the
+        # paper https://pmc.ncbi.nlm.nih.gov/articles/PMC5730079/:
+        # equation (5): M = (λ/(2π)) * (1/α) * (pixel_area) * Σ phase_values
+        wavelength = self._wav.value() * 1e-6  # meters
+        alpha = 0.2e-3  # refractive index increment in m³/kg (0.2 mL/g from paper)
+        pixel_size_m = (
+            self._cam_pixel_size.value() / self._mag.value()
+        ) * 1e-6  # meters
+        pixel_area_m2 = pixel_size_m**2  # physical area per pixel in m²
+        # calculate dry mass factor: (λ/(2π)) * (1/α) * pixel_area * conversion to picograms
+        dry_mass_factor = (
+            (wavelength / (2 * np.pi)) * (1 / alpha) * pixel_area_m2 * 1e15
+        )
+        props_dict["dry_mass"] = props_dict["intensity_sum"] * dry_mass_factor
