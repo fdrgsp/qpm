@@ -230,7 +230,7 @@ class QPMWidget(QWidget):
 
         # phase contrast layout
         phase_layout = QVBoxLayout(self._phase_wdg)
-        phase_layout.setContentsMargins(5, 20, 5, 5)
+        phase_layout.setContentsMargins(5, 20, 5, 10)
         phase_layout.setSpacing(5)
         phase_layout.addWidget(phase_lbl)
         phase_layout.addStretch()   
