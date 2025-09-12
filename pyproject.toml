@@ -25,5 +25,17 @@ dependencies = [
     "scikit-image",
 ]
 
+[dependency-groups]
+dev = [
+    "ipython",
+    "mypy",
+    "pre-commit-uv",
+    "rich",
+    "ruff",
+]
+
 [project.scripts]
 qpm = "qpm.__main__:main"
+
+[tool.typos.default]
+extend-ignore-identifiers-re = ["(?i)ome"]
