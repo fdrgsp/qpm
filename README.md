@@ -14,6 +14,8 @@ uvx git+https://github.com/fdrgsp/qpm
 
 ## GPU & CUDA on Windows
 
+To use the GPU version of qpm on Windows, you need to have a compatible NVIDIA GPU and the corresponding CUDA toolkit installed.
+
 NOTE: [NVIDIA Drivers](https://www.nvidia.com/en-us/drivers/) should be already installed.
 
 You need to go through the following steps only once, just the first time you install qpm:
