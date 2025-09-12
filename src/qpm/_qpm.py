@@ -524,7 +524,6 @@ class QPMWidget(QWidget):
         print(f"Saved QPM results for {name}")
         return ph
 
-
     # PHASE CONTRAST PROCESSING METHODS------------------------------------------------
 
     def _run_phc(self) -> Generator[dict, None, None]:
