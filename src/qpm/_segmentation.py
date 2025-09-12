@@ -5,6 +5,7 @@ import numpy as np
 
 class CellposeSAMSegmentation:
     """A class to handle cellpose segmentation of bacteria images."""
+
     def __init__(self) -> None:
         io.logger_setup()
 
@@ -18,11 +19,11 @@ class CellposeSAMSegmentation:
 
     def eval(self, image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Run CellposeSAM segmentation on the given image."""
-        labels, flows, _  = self._model.eval(
+        labels, flows, _ = self._model.eval(
             image,
             batch_size=self.eval_batch_size,
             flow_threshold=self.eval_flow_threshold,
             cellprob_threshold=self.eval_cellprob_threshold,
             normalize={"tile_norm_blocksize": self.eval_tile_norm_blocksize},
-            )
+        )
         return labels, flows
