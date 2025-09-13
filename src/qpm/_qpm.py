@@ -48,6 +48,7 @@ BAR_STYLESHEET = """
 """
 
 TEST_DATA = Path(__file__).parent / "_test_data"
+CAT_PATH = Path(__file__).parent / "_test_data"
 
 
 class QPMWidget(QWidget):
@@ -314,7 +315,7 @@ class QPMWidget(QWidget):
         # add an image widget after the stretch
         img_label = QLabel(self)
 
-        arr = tifffile.imread("./src/qpm/cat.tif")
+        arr = tifffile.imread(CAT_PATH / "cat.tif")
 
 
         h, w = arr.shape
