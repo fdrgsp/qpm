@@ -83,12 +83,16 @@ class QPMWidget(QWidget):
             is_dir=True,
         )
 
-        self._tabs = QTabWidget() # just an instance of the tab widget
-        self.qpm_widget = QWidget() # where all the QPM-related widgets will go 
-        self._tabs.addTab(self.qpm_widget, "QPM") # physically add the qpm_widget to the tab widget
+        self._tabs = QTabWidget()  # just an instance of the tab widget
+        self.qpm_widget = QWidget()  # where all the QPM-related widgets will go
+        self._tabs.addTab(
+            self.qpm_widget, "QPM"
+        )  # physically add the qpm_widget to the tab widget
 
-        self.phc_widget = QWidget() # where all the PHC-related widgets will go
-        self._tabs.addTab(self.phc_widget, "General segmentation") # physically add the tab
+        self.phc_widget = QWidget()  # where all the PHC-related widgets will go
+        self._tabs.addTab(
+            self.phc_widget, "General segmentation"
+        )  # physically add the tab
 
         # qpm settings
         self._wav = QPMSettingsSpinBox("Wavelength (µm):", parent=self)
@@ -164,17 +168,19 @@ class QPMWidget(QWidget):
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
 
-
-
         # Phase settings -- diameter
         self._use_diam = QCheckBox("Use Diameter for Cellpose", parent=self)
         self._use_diam.setChecked(False)
-        self._use_diam.setToolTip("Diameters are used to rescale the image to 30 pix cell diameter.")
+        self._use_diam.setToolTip(
+            "Diameters are used to rescale the image to 30 pix cell diameter."
+        )
 
         self._diameter = QPMSettingsSpinBox("Diameter", parent=self)
         self._diameter.setDecimals(0)
-        self._diameter.setSpecialValueText("—")   # shows a dash when at minimum
-        self._diameter.setToolTip("Diameters are used to rescale the image to 30 pix cell diameter.")
+        self._diameter.setSpecialValueText("—")  # shows a dash when at minimum
+        self._diameter.setToolTip(
+            "Diameters are used to rescale the image to 30 pix cell diameter."
+        )
 
         # React to user toggling the checkbox
         self._use_diam.toggled.connect(self._on_use_toggled)
@@ -182,30 +188,39 @@ class QPMWidget(QWidget):
         # Apply initial state
         self._on_use_toggled(self._use_diam.isChecked(), value_off=0, value_on=30)
 
-        # flow threshold 
+        # flow threshold
         self._flow_threshold = QPMSettingsSpinBox("Flow Threshold:", parent=self)
         self._flow_threshold.setDecimals(2)
         self._flow_threshold.setValue(0.4)
-        self._flow_threshold.setToolTip("Flow error threshold (all cells with errors below threshold are kept) (not used for 3D). Defaults to 0.4")
+        self._flow_threshold.setToolTip(
+            "Flow error threshold (all cells with errors below threshold are kept) (not used for 3D). Defaults to 0.4"
+        )
 
         # cellprob threshold
-        self._cellprob_threshold = QPMSettingsSpinBox("Cellprob Threshold:", parent=self)
+        self._cellprob_threshold = QPMSettingsSpinBox(
+            "Cellprob Threshold:", parent=self
+        )
         self._cellprob_threshold.setDecimals(2)
         self._cellprob_threshold.setValue(0.0)
-        self._cellprob_threshold.setToolTip("All pixels with value above threshold kept for masks, decrease to find more and larger masks. Defaults to 0.0.")
+        self._cellprob_threshold.setToolTip(
+            "All pixels with value above threshold kept for masks, decrease to find more and larger masks. Defaults to 0.0."
+        )
 
         # min size
         self._min_size = QPMSettingsSpinBox("Min Size (pixels):", parent=self)
         self._min_size.setDecimals(0)
-        self._min_size.setValue(15) 
-        self._min_size.setToolTip("All ROIs below this size, in pixels, will be discarded. Defaults to 15.")
+        self._min_size.setValue(15)
+        self._min_size.setToolTip(
+            "All ROIs below this size, in pixels, will be discarded. Defaults to 15."
+        )
 
         # max size fraction
         self._max_size_fraction = QPMSettingsSpinBox("Max Size Fraction:", parent=self)
         self._max_size_fraction.setDecimals(2)
-        self._max_size_fraction.setValue(0.4)  
-        self._max_size_fraction.setToolTip("Masks larger than max_size_fraction of total image size are removed. Default is 0.4.")
-
+        self._max_size_fraction.setValue(0.4)
+        self._max_size_fraction.setToolTip(
+            "Masks larger than max_size_fraction of total image size are removed. Default is 0.4."
+        )
 
         # label styling
         fixed_w = self._na_in._label.sizeHint().width()
@@ -242,8 +257,8 @@ class QPMWidget(QWidget):
         # analysis_phase_wdg = QWidget(self)
         # analysis_p_layout = QHBoxLayout(analysis_phase_wdg)
         # analysis_p_layout.setContentsMargins(0, 0, 0, 0)
-        #analysis_p_layout.setSpacing(10)
-        #analysis_p_layout.addStretch()
+        # analysis_p_layout.setSpacing(10)
+        # analysis_p_layout.addStretch()
 
         # bottom widget
         # progress bar
@@ -256,7 +271,9 @@ class QPMWidget(QWidget):
         run_btn = QPushButton("Run")
         run_btn.setIcon(QIconifyIcon("streamline-sharp:startup-remix", color=GREEN))
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setIcon(QIconifyIcon("fluent-emoji-high-contrast:woman-gesturing-no", color=RED))
+        cancel_btn.setIcon(
+            QIconifyIcon("fluent-emoji-high-contrast:woman-gesturing-no", color=RED)
+        )
         btns_layout = QHBoxLayout()
         btns_layout.setContentsMargins(0, 0, 0, 0)
         btns_layout.setSpacing(5)
@@ -277,7 +294,7 @@ class QPMWidget(QWidget):
         main_layout.addWidget(self._tabs)
 
         # qpm layout tab
-        qpm_layout = QVBoxLayout(self.qpm_widget) 
+        qpm_layout = QVBoxLayout(self.qpm_widget)
         qpm_layout.addWidget(create_divider_line("QPM Settings"))
         qpm_layout.addWidget(self._wav)
         qpm_layout.addWidget(self._mag)
@@ -296,13 +313,13 @@ class QPMWidget(QWidget):
         # phc layout tab
         phc_layout = QVBoxLayout(self.phc_widget)
         phc_layout.addWidget(create_divider_line("Segmentation settings"))
-        #phc_layout.addWidget(analysis_phase_wdg)
+        # phc_layout.addWidget(analysis_phase_wdg)
 
         hbox_diam = QHBoxLayout()
         hbox_diam.addWidget(self._use_diam)
         hbox_diam.addWidget(self._diameter)
 
-        #phc_layout.addWidget(h_box_widget)
+        # phc_layout.addWidget(h_box_widget)
         phc_layout.addLayout(hbox_diam)
 
         phc_layout.addWidget(self._flow_threshold)
@@ -311,12 +328,10 @@ class QPMWidget(QWidget):
         phc_layout.addWidget(self._max_size_fraction)
         phc_layout.addStretch()
 
-
         # add an image widget after the stretch
         img_label = QLabel(self)
 
         arr = tifffile.imread(CAT_PATH / "cat.tif")
-
 
         h, w = arr.shape
         qimg = QImage(arr.data, w, h, w, QImage.Format.Format_Grayscale8)
@@ -326,11 +341,8 @@ class QPMWidget(QWidget):
 
         phc_layout.addWidget(img_label)
 
-
-
         main_layout.addWidget(create_divider_line())
         main_layout.addLayout(btns_layout)
-        
 
         # TO REMOVE, JUST FOR TESTING
         input = TEST_DATA / "input"
@@ -354,7 +366,7 @@ class QPMWidget(QWidget):
 
         self._cancel_requested = False
 
-        if self._tabs.currentIndex() == 0: # QPM tab
+        if self._tabs.currentIndex() == 0:  # QPM tab
             self._worker = create_worker(
                 self._run_qpm,
                 _start_thread=True,
@@ -365,7 +377,7 @@ class QPMWidget(QWidget):
                 },
             )
 
-        if self._tabs.currentIndex() == 1: # phase contrast tab
+        if self._tabs.currentIndex() == 1:  # phase contrast tab
             self._worker = create_worker(
                 self._run_phase_contrast,
                 _start_thread=True,
@@ -373,10 +385,10 @@ class QPMWidget(QWidget):
                     "yielded": self._update_progress,
                     "finished": self._on_processing_finished,
                     "errored": self._on_error,
-                    },
-                )
+                },
+            )
 
-    def _on_use_toggled(self, checked: bool, value_off = 0, value_on = 30) -> None:
+    def _on_use_toggled(self, checked: bool, value_off=0, value_on=30) -> None:
         """Enable or disable the diameter spin box based on the checkbox state."""
         self._diameter.setEnabled(checked)
         if checked:
@@ -384,8 +396,6 @@ class QPMWidget(QWidget):
         elif not checked:
             self._diameter.setValue(value_off)
             pass
-
-
 
     def _update_progress(self, progress_data: dict) -> None:
         """Update the progress bar."""
@@ -496,10 +506,8 @@ class QPMWidget(QWidget):
 
         num_files = self._get_total_number_of_files()
 
-
         # Initialize progress bar
         yield {"type": "init", "total": num_files}
-
 
         current_file = 0
         path = Path(self._input_dir.value())
@@ -537,15 +545,12 @@ class QPMWidget(QWidget):
                     out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
                     out.mkdir(parents=True, exist_ok=True)
 
-
                     seg = self._segment_file(image, tif_file.stem, out)
                     if seg is not None:
                         self._generate_csv_file(seg, image, tif_file.stem, out)
 
                     current_file += 1
                     yield {"type": "update", "current": current_file}
-
-
 
     def _validate_image(self, image: np.ndarray) -> bool:
         """Validate the input image."""
@@ -598,9 +603,14 @@ class QPMWidget(QWidget):
         min_size = int(self._min_size.value())
         max_size_fraction = self._max_size_fraction.value()
 
-        labels, _, _ = self._cp2.eval(image, diameter=diameter, flow_threshold=flow_threshold,
-                                    cellprob_threshold=cellprob_threshold, min_size=min_size,
-                                    max_size_fraction=max_size_fraction)
+        labels, _, _ = self._cp2.eval(
+            image,
+            diameter=diameter,
+            flow_threshold=flow_threshold,
+            cellprob_threshold=cellprob_threshold,
+            min_size=min_size,
+            max_size_fraction=max_size_fraction,
+        )
 
         # save the labels
         print("Saving labels...")
