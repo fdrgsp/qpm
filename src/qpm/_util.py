@@ -105,6 +105,14 @@ class QPMSettingsSpinBox(QWidget):
         """Set the number of decimal places for the spin box."""
         self._spin.setDecimals(decimals)
 
+    def setReadOnly(self, read_only: bool) -> None:
+        """Set the read-only state of the spin box."""
+        self._spin.setReadOnly(read_only)
+
+    def setSpecialValueText(self, text: str) -> None:
+        """Set the special value text for the spin box."""
+        self._spin.setSpecialValueText(text)
+
 
 def create_divider_line(text: str | None = None) -> QWidget:
     """Create a horizontal divider line, optionally with text.

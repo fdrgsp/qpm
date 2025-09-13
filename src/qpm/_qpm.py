@@ -27,11 +27,11 @@ from ._dpc_algorithm import DPCSolver
 from superqt import QIconifyIcon
 from ._segmentation import CellposeSAMSegmentation
 import tifffile
-from cellpose import io
+from cellpose import core, io, models
 from superqt.utils import create_worker, GeneratorWorker, FunctionWorker
 
 RED = "#C33"
-GREEN = "#00FF00"
+GREEN = "#7300FF"
 PROCESSED = "_processed"
 
 BAR_STYLESHEET = """
@@ -65,6 +65,7 @@ class QPMWidget(QWidget):
 
         # segmentation
         self._cp = CellposeSAMSegmentation()
+        self._cp2 = models.CellposeModel(gpu=core.use_gpu(), pretrained_model="cpsam")
 
         # input and output directories
         self._input_dir = BrowseWidget(
@@ -80,18 +81,17 @@ class QPMWidget(QWidget):
             is_dir=True,
         )
 
-        self.tabs = QTabWidget() # TODO: Maria
-        self._random = QPMSettingsSpinBox("asdfasdf", parent=self)
-        self._random.setDecimals(3)
+        self._tabs = QTabWidget() # just an instance of the tab widget
+        self.qpm_widget = QWidget() # where all the QPM-related widgets will go 
+        self._tabs.addTab(self.qpm_widget, "QPM") # physically add the qpm_widget to the tab widget
 
-        self._random.setValue(42)
+        self.phc_widget = QWidget() # where all the PHC-related widgets will go
+        self._tabs.addTab(self.phc_widget, "General segmentation") # physically add the tab
 
         # qpm settings
         self._wav = QPMSettingsSpinBox("Wavelength (µm):", parent=self)
         self._wav.setDecimals(3)
         self._wav.setValue(0.530)
-
-
 
         self._mag = QPMSettingsSpinBox("Magnification:", parent=self)
         self._mag.setValue(40)
@@ -148,7 +148,6 @@ class QPMWidget(QWidget):
         fixed_w = self._na_in._label.sizeHint().width()
         for widget in [
             self._wav,
-            self._random,
             self._mag,
             self._na,
             self._na_in,
@@ -163,7 +162,59 @@ class QPMWidget(QWidget):
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
 
-        # analysis
+
+
+        # Phase settings -- diameter
+        self._use_diam = QCheckBox("Use Diameter for Cellpose", parent=self)
+        self._use_diam.setChecked(False)
+
+        self._diameter = QPMSettingsSpinBox("Diameter", parent=self)
+        self._diameter.setDecimals(0)
+        self._diameter.setSpecialValueText("—")   # shows a dash when at minimum
+
+        # React to user toggling the checkbox
+        self._use_diam.toggled.connect(self._on_use_toggled)
+
+        # Apply initial state
+        self._on_use_toggled(self._use_diam.isChecked(), value_off=0, value_on=30)
+
+        # flow threshold 
+        self._flow_threshold = QPMSettingsSpinBox("Flow Threshold:", parent=self)
+        self._flow_threshold.setDecimals(2)
+        self._flow_threshold.setValue(0.4)
+
+        # cellprob threshold
+        self._cellprob_threshold = QPMSettingsSpinBox("Cellprob Threshold:", parent=self)
+        self._cellprob_threshold.setDecimals(2)
+        self._cellprob_threshold.setValue(0.0)
+
+        # min size
+        self._min_size = QPMSettingsSpinBox("Min Size (pixels):", parent=self)
+        self._min_size.setDecimals(0)
+        self._min_size.setValue(15) 
+
+        # max size fraction
+        self._max_size_fraction = QPMSettingsSpinBox("Max Size Fraction:", parent=self)
+        self._max_size_fraction.setDecimals(2)
+        self._max_size_fraction.setValue(0.4)  
+
+
+        # label styling
+        fixed_w = self._na_in._label.sizeHint().width()
+        for widget in [
+            self._diameter,
+            self._flow_threshold,
+            self._cellprob_threshold,
+            self._min_size,
+            self._max_size_fraction,
+        ]:
+            widget._label.setFixedWidth(fixed_w)
+        self._input_dir._label.setFixedWidth(fixed_w)
+        self._output_dir._label.setFixedWidth(fixed_w)
+        r_lbl.setFixedWidth(fixed_w)
+        i_lbl.setFixedWidth(fixed_w)
+
+        # Analysis widget (QPM)
         analysis_wdg = QWidget(self)
         a_lbl = QLabel("Analysis to perform:", self)
         a_lbl.setFixedWidth(fixed_w)
@@ -179,12 +230,29 @@ class QPMWidget(QWidget):
         analysis_layout.addWidget(self._segment_cbox)
         analysis_layout.addStretch()
 
+        # analysis (phase)
+        analysis_phase_wdg = QWidget(self)
+        a_phase_lbl = QLabel("Analysis to perform:", self)
+        a_phase_lbl.setFixedWidth(fixed_w)
+        self._phase_segment_cbox = QCheckBox("Segmentation", self)
+        self._phase_segment_cbox.setChecked(True)
+        analysis_p_layout = QHBoxLayout(analysis_phase_wdg)
+
+
+
+        analysis_p_layout.setContentsMargins(0, 0, 0, 0)
+        analysis_p_layout.setSpacing(10)
+        analysis_p_layout.addWidget(a_phase_lbl)
+        analysis_p_layout.addWidget(self._phase_segment_cbox)
+        analysis_p_layout.addStretch()
+
         # bottom widget
         # progress bar
         self._progress_bar = QProgressBar(self)
         self._progress_bar.setTextVisible(True)
         self._progress_bar.setStyleSheet(BAR_STYLESHEET)
         self._progress_bar.setFixedHeight(15)
+
         # buttons
         run_btn = QPushButton("Run")
         run_btn.setIcon(QIconifyIcon("mdi:play", color=GREEN))
@@ -207,24 +275,46 @@ class QPMWidget(QWidget):
         main_layout.addWidget(create_divider_line("Input/Output Directories"))
         main_layout.addWidget(self._input_dir)
         main_layout.addWidget(self._output_dir)
-        #main_layout.addWidget(self.tabs) # TODO: Maria
-        main_layout.addWidget(create_divider_line("QPM Settings"))
-        main_layout.addWidget(self._wav)
-        main_layout.addWidget(self._random)
-        main_layout.addWidget(self._mag)
-        main_layout.addWidget(self._na)
-        main_layout.addWidget(self._na_in)
-        main_layout.addWidget(self._cam_pixel_size)
-        # main_layout.addWidget(self._num_channels)
-        main_layout.addWidget(rotation_wdg)
-        main_layout.addWidget(invert_ph)
-        main_layout.addWidget(create_divider_line("QPM Tikhonov Settings"))
-        main_layout.addWidget(self._tikhonov_abs)
-        main_layout.addWidget(self._tikhonov_ph)
-        main_layout.addWidget(create_divider_line("Analysis"))
-        main_layout.addWidget(analysis_wdg)
+        main_layout.addWidget(self._tabs)
+
+        # qpm layout tab
+        qpm_layout = QVBoxLayout(self.qpm_widget) 
+        qpm_layout.addWidget(create_divider_line("QPM Settings"))
+        qpm_layout.addWidget(self._wav)
+        qpm_layout.addWidget(self._mag)
+        qpm_layout.addWidget(self._na)
+        qpm_layout.addWidget(self._na_in)
+        qpm_layout.addWidget(self._cam_pixel_size)
+        # qpm_layout.addWidget(self._num_channels)
+        qpm_layout.addWidget(rotation_wdg)
+        qpm_layout.addWidget(invert_ph)
+        qpm_layout.addWidget(create_divider_line("QPM Tikhonov Settings"))
+        qpm_layout.addWidget(self._tikhonov_abs)
+        qpm_layout.addWidget(self._tikhonov_ph)
+        qpm_layout.addWidget(create_divider_line("Analysis"))
+        qpm_layout.addWidget(analysis_wdg)
+
+        # phc layout tab
+        phc_layout = QVBoxLayout(self.phc_widget)
+        phc_layout.addWidget(create_divider_line("Analysis"))
+        phc_layout.addWidget(analysis_phase_wdg)
+
+
+        hbox_diam = QHBoxLayout()
+        hbox_diam.addWidget(self._use_diam)
+        hbox_diam.addWidget(self._diameter)
+
+        #phc_layout.addWidget(h_box_widget)
+        phc_layout.addLayout(hbox_diam)
+
+        phc_layout.addWidget(self._flow_threshold)
+        phc_layout.addWidget(self._cellprob_threshold)
+        phc_layout.addWidget(self._min_size)
+        phc_layout.addWidget(self._max_size_fraction)
+
         main_layout.addWidget(create_divider_line())
         main_layout.addLayout(btns_layout)
+        
 
         # TO REMOVE, JUST FOR TESTING
         input = TEST_DATA / "input"
@@ -245,16 +335,40 @@ class QPMWidget(QWidget):
 
     def run(self) -> None:
         """Run the QPM processing in a separate thread."""
+
         self._cancel_requested = False
-        self._worker = create_worker(
-            self._run,
-            _start_thread=True,
-            _connect={
-                "yielded": self._update_progress,
-                "finished": self._on_processing_finished,
-                "errored": self._on_error,
-            },
-        )
+
+        if self._tabs.currentIndex() == 0: # QPM tab
+            self._worker = create_worker(
+                self._run_qpm,
+                _start_thread=True,
+                _connect={
+                    "yielded": self._update_progress,
+                    "finished": self._on_processing_finished,
+                    "errored": self._on_error,
+                },
+            )
+        if self._tabs.currentIndex() == 1: # phase contrast tab
+            self._worker = create_worker(
+                self._run_phase_contrast,
+                _start_thread=True,
+                _connect={
+                    "yielded": self._update_progress,
+                    "finished": self._on_processing_finished,
+                    "errored": self._on_error,
+                    },
+                )
+
+    def _on_use_toggled(self, checked: bool, value_off = 0, value_on = 30) -> None:
+        """Enable or disable the diameter spin box based on the checkbox state."""
+        self._diameter.setEnabled(checked)
+        if checked:
+            self._diameter.setValue(value_on)
+        elif not checked:
+            self._diameter.setValue(value_off)
+            pass
+
+
 
     def _update_progress(self, progress_data: dict) -> None:
         """Update the progress bar."""
@@ -282,7 +396,7 @@ class QPMWidget(QWidget):
         self._progress_bar.setValue(0)
         self._progress_bar.setFormat("")
 
-    def _run(self) -> Generator[dict, None, None]:
+    def _run_qpm(self) -> Generator[dict, None, None]:
         """Run the QPM processing."""
         if not self._input_dir.value():
             return
@@ -354,6 +468,73 @@ class QPMWidget(QWidget):
                     current_file += 1
                     yield {"type": "update", "current": current_file}
 
+    def _run_phase_contrast(self) -> Generator[dict, None, None]:
+        """Run the phase contrast processing."""
+        if not self._input_dir.value():
+            return
+
+        if not self._output_dir.value():
+            show_error_dialog(self, "Output directory is not set.")
+            return
+
+        num_files = self._get_total_number_of_files()
+
+
+        # Initialize progress bar
+        yield {"type": "init", "total": num_files}
+
+
+        current_file = 0
+        path = Path(self._input_dir.value())
+        for item in path.iterdir():
+            if self._cancel_requested:
+                return
+
+            if item.is_file() and item.suffix in {".tif", ".tiff"}:
+                name = item.stem.replace(".ome", "")
+
+                image = tifffile.imread(item)
+
+                if not self._validate_image(image):
+                    continue
+
+                out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
+                out.mkdir(parents=True, exist_ok=True)
+
+                seg = None
+
+                if self._segment_cbox.isChecked():
+                    seg = self._segment_file(image, name, out)
+                if seg is not None:
+                    self._generate_csv_file(seg, image, name, out)
+
+                current_file += 1
+                yield {"type": "update", "current": current_file}
+
+            elif item.is_dir():
+                for tif_file in item.glob("*.tif"):
+                    name = tif_file.stem.replace(".ome", "")
+
+                    image = tifffile.imread(tif_file)
+
+                    if not self._validate_image(image):
+                        continue
+
+                    out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
+                    out.mkdir(parents=True, exist_ok=True)
+
+                    seg = None
+
+                    if self._segment_cbox.isChecked():
+                        seg = self._segment_file(image, tif_file.stem, out)
+                    if seg is not None:
+                        self._generate_csv_file(seg, image, tif_file.stem, out)
+
+                    current_file += 1
+                    yield {"type": "update", "current": current_file}
+
+
+
     def _validate_image(self, image: np.ndarray) -> bool:
         """Validate the input image."""
         if image.ndim != 3:
@@ -399,7 +580,15 @@ class QPMWidget(QWidget):
 
         # run segmentation
         print("Running CellposeSAM segmentation...")
-        labels, _ = self._cp.eval(image)
+        diameter = self._diameter.value() if self._use_diam.isChecked() else None
+        flow_threshold = self._flow_threshold.value()
+        cellprob_threshold = self._cellprob_threshold.value()
+        min_size = int(self._min_size.value())
+        max_size_fraction = self._max_size_fraction.value()
+
+        labels, _, _ = self._cp2.eval(image, diameter=diameter, flow_threshold=flow_threshold,
+                                    cellprob_threshold=cellprob_threshold, min_size=min_size,
+                                    max_size_fraction=max_size_fraction)
 
         # save the labels
         print("Saving labels...")
