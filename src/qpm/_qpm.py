@@ -30,10 +30,12 @@ from ._segmentation import CellposeSAMSegmentation
 import tifffile
 from cellpose import core, io, models
 from superqt.utils import create_worker, GeneratorWorker, FunctionWorker
+import traceback
 
 RED = "#C33"
 GREEN = "#7300FF"
-PROCESSED = "_processed"
+QPM_PROCESSED = "_qpm_processed"
+PHC_PROCESSED = "_phc_segmented"
 
 BAR_STYLESHEET = """
     QProgressBar {
@@ -66,8 +68,7 @@ class QPMWidget(QWidget):
         self._dpc_solver: DPCSolver | None = None
 
         # segmentation
-        self._cp = CellposeSAMSegmentation()
-        self._cp2 = models.CellposeModel(gpu=core.use_gpu(), pretrained_model="cpsam")
+        self._cp = models.CellposeModel(gpu=core.use_gpu(), pretrained_model="cpsam")
 
         # input and output directories
         self._input_dir = BrowseWidget(
@@ -415,11 +416,11 @@ class QPMWidget(QWidget):
         self._cancel_requested = False
         print("Processing completed!")
 
-    def _on_error(self) -> None:
-        """Called when an error occurs during processing."""
+
+    def _on_error(self, exc: Exception) -> None:
+        print("Processing failed!", exc)
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
         self._cancel_requested = False
-        print("Processing failed!")
-        # clear the progress bar
         self._progress_bar.setValue(0)
         self._progress_bar.setFormat("")
 
@@ -429,12 +430,16 @@ class QPMWidget(QWidget):
             return
 
         if not self._output_dir.value():
-            show_error_dialog(self, "Output directory is not set.")
+            yield {"type": "error", "message": "Output directory is not set."}
             return
 
         rotations = self._parse_rotation()
+        if not rotations:
+            yield {"type": "error", "message": "Invalid rotation angles format."}
+            return
 
         num_files = self._get_total_number_of_files()
+        failed_files = []  # Collect failed files
 
         # Initialize progress bar
         yield {"type": "init", "total": num_files}
@@ -453,10 +458,14 @@ class QPMWidget(QWidget):
 
                 image = tifffile.imread(item)
 
-                if not self._validate_image(image):
+                is_valid, error_msg = self._validate_qpm_image(image)
+                if not is_valid:
+                    failed_files.append(f"{name}: {error_msg}")
+                    current_file += 1
+                    yield {"type": "update", "current": current_file}
                     continue
 
-                out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
+                out = Path(self._output_dir.value()) / f"{name}{QPM_PROCESSED}"
                 out.mkdir(parents=True, exist_ok=True)
 
                 ph, seg = None, None
@@ -477,10 +486,14 @@ class QPMWidget(QWidget):
 
                     image = tifffile.imread(tif_file)
 
-                    if not self._validate_image(image):
+                    is_valid, error_msg = self._validate_qpm_image(image)
+                    if not is_valid:
+                        failed_files.append(f"{name}: {error_msg}")
+                        current_file += 1
+                        yield {"type": "update", "current": current_file}
                         continue
 
-                    out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
+                    out = Path(self._output_dir.value()) / f"{name}{QPM_PROCESSED}"
                     out.mkdir(parents=True, exist_ok=True)
 
                     ph, seg = None, None
@@ -495,16 +508,25 @@ class QPMWidget(QWidget):
                     current_file += 1
                     yield {"type": "update", "current": current_file}
 
+        # Report failed files at the end
+        if failed_files:
+            error_message = "The following files failed validation:\n\n" + "\n".join(
+                failed_files
+            )
+            yield {"type": "validation_errors", "message": error_message}
+
+
     def _run_phase_contrast(self) -> Generator[dict, None, None]:
-        """Run the phase contrast processing."""
+        """Run the Phase Contrast processing."""
         if not self._input_dir.value():
             return
 
         if not self._output_dir.value():
-            show_error_dialog(self, "Output directory is not set.")
+            yield {"type": "error", "message": "Output directory is not set."}
             return
 
         num_files = self._get_total_number_of_files()
+        failed_files = []  # Collect failed files
 
         # Initialize progress bar
         yield {"type": "init", "total": num_files}
@@ -514,21 +536,25 @@ class QPMWidget(QWidget):
         for item in path.iterdir():
             if self._cancel_requested:
                 return
-
+            
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
                 name = item.stem.replace(".ome", "")
 
                 image = tifffile.imread(item)
 
-                if not self._validate_image(image):
+                is_valid, error_msg = self._validate_image(image)
+                if not is_valid:
+                    failed_files.append(f"{name}: {error_msg}")
+                    current_file += 1
+                    yield {"type": "update", "current": current_file}
                     continue
 
-                out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
+                out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
                 out.mkdir(parents=True, exist_ok=True)
 
                 seg = self._segment_file(image, name, out)
-                if seg is not None:
-                    self._generate_csv_file(seg, image, name, out)
+                # if seg is not None: #TODO: This requires info on which channel to compute regionprobs on 
+                #     self._generate_csv_file(seg, image, name, out)
 
                 current_file += 1
                 yield {"type": "update", "current": current_file}
@@ -539,30 +565,50 @@ class QPMWidget(QWidget):
 
                     image = tifffile.imread(tif_file)
 
-                    if not self._validate_image(image):
+                    is_valid, error_msg = self._validate_image(image)
+                    if not is_valid:
+                        failed_files.append(f"{name}: {error_msg}")
+                        current_file += 1
+                        yield {"type": "update", "current": current_file}
                         continue
 
-                    out = Path(self._output_dir.value()) / f"{name}{PROCESSED}"
+                    out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
                     out.mkdir(parents=True, exist_ok=True)
 
                     seg = self._segment_file(image, tif_file.stem, out)
-                    if seg is not None:
-                        self._generate_csv_file(seg, image, tif_file.stem, out)
+                    # if seg is not None:
+                    #     self._generate_csv_file(seg, image, tif_file.stem, out)
+                    
 
                     current_file += 1
                     yield {"type": "update", "current": current_file}
 
-    def _validate_image(self, image: np.ndarray) -> bool:
+
+    def _validate_qpm_image(self, image: np.ndarray) -> tuple[bool, str]:
+        """Validate the input image.
+
+        Returns:
+            tuple: (is_valid, error_message)
+        """
+        if image.ndim != 3:
+            return False, "The file should have 3 dimensions (C, H, W)."
+        if image.shape[0] != 4:
+            return False, "The file should have 4 channels, one per illumination angle."
+        return True, ""
+
+
+
+    def _validate_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image."""
         if image.ndim != 3:
-            show_error_dialog(self, "The file should have 3 dimensions (C, H, W).")
-            return False
-        if image.shape[0] != 4:
-            show_error_dialog(
-                self, "The file should have 4 channels, one per illumination angle."
-            )
-            return False
-        return True
+            return False, "The file should have 3 dimensions (C, H, W)."
+        if image.shape[0] > 2:
+            print(f"WARNING: {image.shape[0]} is too many channels! Cellpose-SAM has been trained with the cytoplasm and nuclear channels in any order.")
+        if image.shape[0] > 4:
+            return False, "Too many channels! Cellpose-SAM has been trained with the cytoplasm and nuclear channels in any order."
+        return True, ""
+
+
 
     def _parse_rotation(self) -> list[float]:
         """Parse the rotation angles from the input."""
@@ -581,6 +627,7 @@ class QPMWidget(QWidget):
                 total_files += 1
             elif item.is_dir():
                 total_files += len(list(item.glob("*.tif")))
+
         return total_files
 
     def _segment_file(
@@ -597,35 +644,41 @@ class QPMWidget(QWidget):
 
         # run segmentation
         print("Running CellposeSAM segmentation...")
-        diameter = self._diameter.value() if self._use_diam.isChecked() else None
-        flow_threshold = self._flow_threshold.value()
-        cellprob_threshold = self._cellprob_threshold.value()
-        min_size = int(self._min_size.value())
-        max_size_fraction = self._max_size_fraction.value()
 
-        labels, _, _ = self._cp2.eval(
-            image,
-            diameter=diameter,
-            flow_threshold=flow_threshold,
-            cellprob_threshold=cellprob_threshold,
-            min_size=min_size,
-            max_size_fraction=max_size_fraction,
-        )
+
+        if self._tabs.currentIndex() == 1:
+            diameter = self._diameter.value() if self._use_diam.isChecked() else None
+            flow_threshold = self._flow_threshold.value()
+            cellprob_threshold = self._cellprob_threshold.value()
+            min_size = int(self._min_size.value())
+            max_size_fraction = self._max_size_fraction.value()
+
+        else: # QPM
+            diameter = None
+            flow_threshold = 0.4
+            cellprob_threshold = 0.0
+            min_size = 15
+            max_size_fraction = 0.4
+            
+        labels, _, _ = self._cp.eval(image, diameter=diameter, flow_threshold=flow_threshold,
+                                    cellprob_threshold=cellprob_threshold, min_size=min_size,
+                                    max_size_fraction=max_size_fraction)
 
         # save the labels
         print("Saving labels...")
         io.imsave(output_dir / f"{name}_labels.tif", labels)
         # This I would remove later on or make it optional.
-        fig, ax = plt.subplots(1, 2, figsize=(8, 4))
-        ax[0].imshow(image, cmap="gray")
-        ax[0].set_title("Phase Image")
-        ax[0].axis("off")
-        ax[1].imshow(labels, cmap="nipy_spectral")
-        ax[1].set_title("Labels")
-        ax[1].axis("off")
-        plt.tight_layout()
-        plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
-        plt.close()
+        if self._tabs.currentIndex() == 0:
+            fig, ax = plt.subplots(1, 2, figsize=(8, 4))
+            ax[0].imshow(image, cmap="gray")
+            ax[0].set_title("Phase Image")
+            ax[0].axis("off")
+            ax[1].imshow(labels, cmap="nipy_spectral")
+            ax[1].set_title("Labels")
+            ax[1].axis("off")
+            plt.tight_layout()
+            plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
+            #plt.close()
         print(f"Saved labels for {name}")
         return labels
 
