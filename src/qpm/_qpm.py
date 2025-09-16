@@ -600,12 +600,12 @@ class QPMWidget(QWidget):
 
     def _validate_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image."""
-        if image.ndim != 3:
-            return False, "The file should have 3 dimensions (C, H, W)."
+        # if image.ndim != 3:
+        #     return False, "The file should have 3 dimensions (C, H, W)."
         if image.shape[0] > 2:
             print(f"WARNING: {image.shape[0]} is too many channels! Cellpose-SAM has been trained with the cytoplasm and nuclear channels in any order.")
-        if image.shape[0] > 4:
-            return False, "Too many channels! Cellpose-SAM has been trained with the cytoplasm and nuclear channels in any order."
+        # if image.shape[0] > 4:
+        #     return False, "Too many channels! Cellpose-SAM has been trained with the cytoplasm and nuclear channels in any order."
         return True, ""
 
 
@@ -659,7 +659,7 @@ class QPMWidget(QWidget):
             cellprob_threshold = 0.0
             min_size = 15
             max_size_fraction = 0.4
-            
+
         labels, _, _ = self._cp.eval(image, diameter=diameter, flow_threshold=flow_threshold,
                                     cellprob_threshold=cellprob_threshold, min_size=min_size,
                                     max_size_fraction=max_size_fraction)
