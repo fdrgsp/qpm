@@ -25,6 +25,14 @@ dependencies = [
     "scikit-image",
 ]
 
+[project.optional-dependencies]
+# to override the default PyTorch installation form Cellpose with the CUDA version.
+# has to be usesd with uvx as explained in the README.
+cuda = [
+    "torch",
+    "torchvision"
+]
+
 [dependency-groups]
 dev = [
     "ipython",
