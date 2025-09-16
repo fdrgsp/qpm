@@ -8,14 +8,14 @@ packages = ["src/qpm"]
 [project]
 name = "qpm"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 authors = [
     { name = "Federico Gasparoli", email = "federico.gasparoli@gmail.com" },
 ]
 
 dependencies = [
     "numpy",
-    "pyqt6",
+    "PyQt6",
     "superqt[iconify]",
     "cellpose",
     "tifffile",
@@ -23,6 +23,14 @@ dependencies = [
     "scipy",
     "pandas",
     "scikit-image",
+]
+
+[project.optional-dependencies]
+# to override the default PyTorch installation form Cellpose with the CUDA version.
+# has to be usesd with uvx as explained in the README.
+cuda = [
+    "torch",
+    "torchvision"
 ]
 
 [dependency-groups]
