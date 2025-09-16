@@ -8,14 +8,14 @@ packages = ["src/qpm"]
 [project]
 name = "qpm"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 authors = [
     { name = "Federico Gasparoli", email = "federico.gasparoli@gmail.com" },
 ]
 
 dependencies = [
     "numpy",
-    "pyqt6",
+    "PyQt6",
     "superqt[iconify]",
     "cellpose",
     "tifffile",
