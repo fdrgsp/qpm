@@ -21,7 +21,7 @@ To use the GPU version of `qpm` on Windows, you need to have a compatible NVIDIA
 This is the easiest way to install `qpm` on Windows with CUDA GPU support:
 
 ```bash
-uvx --default-index https://download.pytorch.org/whl/cu126 git+https://github.com/fdrgsp/qpm[cuda]
+uvx --index https://download.pytorch.org/whl/cu126 git+https://github.com/fdrgsp/qpm[cuda]
 ```
 
 `NOTE:` change `cu126` to match your CUDA version (to get the correct URL, check the [PyTorch Get Started page](https://pytorch.org/get-started/locally/).
