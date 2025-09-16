@@ -85,16 +85,12 @@ class QPMWidget(QWidget):
         )
 
         # TABS WIDGET --------------------------------------------------------------
-        self._tabs = QTabWidget() 
-        self.qpm_widget = QWidget()  
-        self._tabs.addTab(
-            self.qpm_widget, "QPM"
-        )  
+        self._tabs = QTabWidget()
+        self.qpm_widget = QWidget()
+        self._tabs.addTab(self.qpm_widget, "QPM")
 
-        self.phc_widget = QWidget()  
-        self._tabs.addTab(
-            self.phc_widget, "Phase contrast segmentation"
-        )  
+        self.phc_widget = QWidget()
+        self._tabs.addTab(self.phc_widget, "Phase contrast segmentation")
 
         # QPM WIDGET --------------------------------------------------------------
         # qpm settings
@@ -115,7 +111,6 @@ class QPMWidget(QWidget):
             "Camera Pixel Size (µm):", parent=self
         )
         self._cam_pixel_size.setValue(6.5)
-
 
         rotation_wdg = QWidget(self)
         rotation_wdg.setToolTip(
@@ -254,7 +249,6 @@ class QPMWidget(QWidget):
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
 
-
         # BOTTOM WIDGET -------------------------------------------------------------
         self._progress_bar = QProgressBar(self)
         self._progress_bar.setTextVisible(True)
@@ -306,7 +300,6 @@ class QPMWidget(QWidget):
         qpm_layout.addWidget(create_divider_line("Analysis"))
         qpm_layout.addWidget(analysis_wdg)
 
-
         # Segmentation layout (main layout)
         main_layout.addWidget(create_divider_line("Segmentation settings"))
         hbox_diam = QHBoxLayout()
@@ -345,7 +338,7 @@ class QPMWidget(QWidget):
         self._cancel_requested = False
 
         # qpm tab
-        if self._tabs.currentIndex() == 0:  
+        if self._tabs.currentIndex() == 0:
             self._worker = create_worker(
                 self._run_qpm,
                 _start_thread=True,
@@ -357,7 +350,7 @@ class QPMWidget(QWidget):
             )
 
         # phase contrast tab
-        if self._tabs.currentIndex() == 1:  
+        if self._tabs.currentIndex() == 1:
             self._worker = create_worker(
                 self._run_phase_contrast,
                 _start_thread=True,
@@ -434,9 +427,14 @@ class QPMWidget(QWidget):
         min_size = int(self._min_size.value())
         max_size_fraction = self._max_size_fraction.value()
 
-        labels, _, _ = self._cp.eval(image, diameter=diameter, flow_threshold=flow_threshold,
-                                    cellprob_threshold=cellprob_threshold, min_size=min_size,
-                                    max_size_fraction=max_size_fraction)
+        labels, _, _ = self._cp.eval(
+            image,
+            diameter=diameter,
+            flow_threshold=flow_threshold,
+            cellprob_threshold=cellprob_threshold,
+            min_size=min_size,
+            max_size_fraction=max_size_fraction,
+        )
 
         # save the labels
         print("Saving labels...")
@@ -452,7 +450,7 @@ class QPMWidget(QWidget):
             ax[1].axis("off")
             plt.tight_layout()
             plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
-            #plt.close()
+            # plt.close()
         print(f"Saved labels for {name}")
         return labels
 
@@ -773,10 +771,8 @@ class QPMWidget(QWidget):
             yield {"type": "error", "message": "Output directory is not set."}
             return
 
-
         num_files = self._get_total_number_of_files()
         failed_files = []  # Collect failed files
-
 
         # Initialize progress bar
         yield {"type": "init", "total": num_files}
@@ -786,7 +782,7 @@ class QPMWidget(QWidget):
         for item in path.iterdir():
             if self._cancel_requested:
                 return
-            
+
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
                 name = item.stem.replace(".ome", "")
                 image = tifffile.imread(item)
@@ -802,7 +798,7 @@ class QPMWidget(QWidget):
                 out.mkdir(parents=True, exist_ok=True)
 
                 seg = self._segment_file(image, name, out)
-                # if seg is not None: #TODO: This requires info on which channel to compute regionprobs on 
+                # if seg is not None: #TODO: This requires info on which channel to compute regionprobs on
                 #     self._generate_csv_file(seg, image, name, out)
 
                 current_file += 1
@@ -827,7 +823,6 @@ class QPMWidget(QWidget):
                     seg = self._segment_file(image, tif_file.stem, out)
                     # if seg is not None:
                     #     self._generate_csv_file(seg, image, tif_file.stem, out)
-                    
 
                     current_file += 1
                     yield {"type": "update", "current": current_file}
