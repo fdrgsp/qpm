@@ -416,7 +416,6 @@ class QPMWidget(QWidget):
         self._cancel_requested = False
         print("Processing completed!")
 
-
     def _on_error(self, exc: Exception) -> None:
         print("Processing failed!", exc)
         traceback.print_exception(type(exc), exc, exc.__traceback__)
@@ -515,7 +514,6 @@ class QPMWidget(QWidget):
             )
             yield {"type": "validation_errors", "message": error_message}
 
-
     def _run_phase_contrast(self) -> Generator[dict, None, None]:
         """Run the Phase Contrast processing."""
         if not self._input_dir.value():
@@ -536,7 +534,7 @@ class QPMWidget(QWidget):
         for item in path.iterdir():
             if self._cancel_requested:
                 return
-            
+
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
                 name = item.stem.replace(".ome", "")
 
@@ -553,7 +551,7 @@ class QPMWidget(QWidget):
                 out.mkdir(parents=True, exist_ok=True)
 
                 seg = self._segment_file(image, name, out)
-                # if seg is not None: #TODO: This requires info on which channel to compute regionprobs on 
+                # if seg is not None: #TODO: This requires info on which channel to compute regionprobs on
                 #     self._generate_csv_file(seg, image, name, out)
 
                 current_file += 1
@@ -578,11 +576,9 @@ class QPMWidget(QWidget):
                     seg = self._segment_file(image, tif_file.stem, out)
                     # if seg is not None:
                     #     self._generate_csv_file(seg, image, tif_file.stem, out)
-                    
 
                     current_file += 1
                     yield {"type": "update", "current": current_file}
-
 
     def _validate_qpm_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image.
@@ -596,19 +592,17 @@ class QPMWidget(QWidget):
             return False, "The file should have 4 channels, one per illumination angle."
         return True, ""
 
-
-
     def _validate_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image."""
         # if image.ndim != 3:
         #     return False, "The file should have 3 dimensions (C, H, W)."
         if image.shape[0] > 2:
-            print(f"WARNING: {image.shape[0]} is too many channels! Cellpose-SAM has been trained with the cytoplasm and nuclear channels in any order.")
+            print(
+                f"WARNING: {image.shape[0]} is too many channels! Cellpose-SAM has been trained with the cytoplasm and nuclear channels in any order."
+            )
         # if image.shape[0] > 4:
         #     return False, "Too many channels! Cellpose-SAM has been trained with the cytoplasm and nuclear channels in any order."
         return True, ""
-
-
 
     def _parse_rotation(self) -> list[float]:
         """Parse the rotation angles from the input."""
@@ -645,7 +639,6 @@ class QPMWidget(QWidget):
         # run segmentation
         print("Running CellposeSAM segmentation...")
 
-
         if self._tabs.currentIndex() == 1:
             diameter = self._diameter.value() if self._use_diam.isChecked() else None
             flow_threshold = self._flow_threshold.value()
@@ -653,16 +646,21 @@ class QPMWidget(QWidget):
             min_size = int(self._min_size.value())
             max_size_fraction = self._max_size_fraction.value()
 
-        else: # QPM
+        else:  # QPM
             diameter = None
             flow_threshold = 0.4
             cellprob_threshold = 0.0
             min_size = 15
             max_size_fraction = 0.4
 
-        labels, _, _ = self._cp.eval(image, diameter=diameter, flow_threshold=flow_threshold,
-                                    cellprob_threshold=cellprob_threshold, min_size=min_size,
-                                    max_size_fraction=max_size_fraction)
+        labels, _, _ = self._cp.eval(
+            image,
+            diameter=diameter,
+            flow_threshold=flow_threshold,
+            cellprob_threshold=cellprob_threshold,
+            min_size=min_size,
+            max_size_fraction=max_size_fraction,
+        )
 
         # save the labels
         print("Saving labels...")
@@ -678,7 +676,7 @@ class QPMWidget(QWidget):
             ax[1].axis("off")
             plt.tight_layout()
             plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
-            #plt.close()
+            # plt.close()
         print(f"Saved labels for {name}")
         return labels
 
