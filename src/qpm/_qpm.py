@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QProgressBar,
 )
-from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import Qt
 import numpy as np
 import pandas as pd
@@ -26,7 +25,6 @@ from ._util import (
 )
 from ._dpc_algorithm import DPCSolver
 from superqt import QIconifyIcon
-from ._segmentation import CellposeSAMSegmentation
 import tifffile
 from cellpose import core, io, models
 from superqt.utils import create_worker, GeneratorWorker, FunctionWorker
@@ -547,72 +545,6 @@ class QPMWidget(QWidget):
             )
             yield {"type": "validation_errors", "message": error_message}
 
-    def _run_phase_contrast(self) -> Generator[dict, None, None]:
-        """Run the Phase Contrast processing."""
-        if not self._input_dir.value():
-            return
-
-        if not self._output_dir.value():
-            yield {"type": "error", "message": "Output directory is not set."}
-            return
-
-        num_files = self._get_total_number_of_files()
-        failed_files = []  # Collect failed files
-
-        # Initialize progress bar
-        yield {"type": "init", "total": num_files}
-
-        current_file = 0
-        path = Path(self._input_dir.value())
-        for item in path.iterdir():
-            if self._cancel_requested:
-                return
-
-            if item.is_file() and item.suffix in {".tif", ".tiff"}:
-                name = item.stem.replace(".ome", "")
-
-                image = tifffile.imread(item)
-
-                is_valid, error_msg = self._validate_image(image)
-                if not is_valid:
-                    failed_files.append(f"{name}: {error_msg}")
-                    current_file += 1
-                    yield {"type": "update", "current": current_file}
-                    continue
-
-                out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
-                out.mkdir(parents=True, exist_ok=True)
-
-                seg = self._segment_file(image, name, out)
-                # if seg is not None: #TODO: This requires info on which channel to compute regionprobs on
-                #     self._generate_csv_file(seg, image, name, out)
-
-                current_file += 1
-                yield {"type": "update", "current": current_file}
-
-            elif item.is_dir():
-                for tif_file in item.glob("*.tif"):
-                    name = tif_file.stem.replace(".ome", "")
-
-                    image = tifffile.imread(tif_file)
-
-                    is_valid, error_msg = self._validate_image(image)
-                    if not is_valid:
-                        failed_files.append(f"{name}: {error_msg}")
-                        current_file += 1
-                        yield {"type": "update", "current": current_file}
-                        continue
-
-                    out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
-                    out.mkdir(parents=True, exist_ok=True)
-
-                    seg = self._segment_file(image, tif_file.stem, out)
-                    # if seg is not None:
-                    #     self._generate_csv_file(seg, image, tif_file.stem, out)
-
-                    current_file += 1
-                    yield {"type": "update", "current": current_file}
-
     def _validate_qpm_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image.
 
@@ -645,74 +577,6 @@ class QPMWidget(QWidget):
             show_error_dialog(self, "Invalid rotation angles format.")
             return []
 
-    def _get_total_number_of_files(self) -> int:
-        """Get the total number of files to process."""
-        path = Path(self._input_dir.value())
-        total_files = 0
-        for item in path.iterdir():
-            if item.is_file() and item.suffix in {".tif", ".tiff"}:
-                total_files += 1
-            elif item.is_dir():
-                total_files += len(list(item.glob("*.tif")))
-
-        return total_files
-
-    def _segment_file(
-        self, image: np.ndarray | None, name: str, output_dir: Path
-    ) -> np.ndarray | None:
-        """Process a single TIF file."""
-        if image is None:
-            return None
-
-        print(f"\nProcessing {name}...")
-
-        if self._cancel_requested:
-            return None
-
-        # run segmentation
-        print("Running CellposeSAM segmentation...")
-
-        if self._tabs.currentIndex() == 1:
-            diameter = self._diameter.value() if self._use_diam.isChecked() else None
-            flow_threshold = self._flow_threshold.value()
-            cellprob_threshold = self._cellprob_threshold.value()
-            min_size = int(self._min_size.value())
-            max_size_fraction = self._max_size_fraction.value()
-
-        else:  # QPM
-            diameter = None
-            flow_threshold = 0.4
-            cellprob_threshold = 0.0
-            min_size = 15
-            max_size_fraction = 0.4
-
-        labels, _, _ = self._cp.eval(
-            image,
-            diameter=diameter,
-            flow_threshold=flow_threshold,
-            cellprob_threshold=cellprob_threshold,
-            min_size=min_size,
-            max_size_fraction=max_size_fraction,
-        )
-
-        # save the labels
-        print("Saving labels...")
-        io.imsave(output_dir / f"{name}_labels.tif", labels)
-        # This I would remove later on or make it optional.
-        if self._tabs.currentIndex() == 0:
-            fig, ax = plt.subplots(1, 2, figsize=(8, 4))
-            ax[0].imshow(image, cmap="gray")
-            ax[0].set_title("Phase Image")
-            ax[0].axis("off")
-            ax[1].imshow(labels, cmap="nipy_spectral")
-            ax[1].set_title("Labels")
-            ax[1].axis("off")
-            plt.tight_layout()
-            plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
-            # plt.close()
-        print(f"Saved labels for {name}")
-        return labels
-
     def _reconstruct_qpm(
         self, image: np.ndarray, name: str, rotations: list[float], output_dir: Path
     ) -> np.ndarray | None:
@@ -721,6 +585,8 @@ class QPMWidget(QWidget):
         Code form Laura Waller Lab: https://github.com/Waller-Lab/DPC/tree/master/python_code
         """
         print(f"Reconstructing QPM for {name}...")
+
+        # to remove
 
         if self._dpc_solver is None:
             print("Initializing DPCSolver...")
@@ -797,7 +663,7 @@ class QPMWidget(QWidget):
                 out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
                 out.mkdir(parents=True, exist_ok=True)
 
-                seg = self._segment_file(image, name, out)
+                self._segment_file(image, name, out)
                 # if seg is not None: #TODO: This requires info on which channel to compute regionprobs on
                 #     self._generate_csv_file(seg, image, name, out)
 
@@ -820,7 +686,7 @@ class QPMWidget(QWidget):
                     out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
                     out.mkdir(parents=True, exist_ok=True)
 
-                    seg = self._segment_file(image, tif_file.stem, out)
+                    self._segment_file(image, tif_file.stem, out)
                     # if seg is not None:
                     #     self._generate_csv_file(seg, image, tif_file.stem, out)
 
