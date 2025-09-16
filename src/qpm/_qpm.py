@@ -50,7 +50,6 @@ BAR_STYLESHEET = """
 """
 
 TEST_DATA = Path(__file__).parent / "_test_data"
-CAT_PATH = Path(__file__).parent / "_todisplay"
 
 
 class QPMWidget(QWidget):
@@ -70,6 +69,7 @@ class QPMWidget(QWidget):
         # segmentation
         self._cp = models.CellposeModel(gpu=core.use_gpu(), pretrained_model="cpsam")
 
+        # COMMON WIDGETS------------------------------------------------------------
         # input and output directories
         self._input_dir = BrowseWidget(
             self,
@@ -84,17 +84,19 @@ class QPMWidget(QWidget):
             is_dir=True,
         )
 
-        self._tabs = QTabWidget()  # just an instance of the tab widget
-        self.qpm_widget = QWidget()  # where all the QPM-related widgets will go
+        # TABS WIDGET --------------------------------------------------------------
+        self._tabs = QTabWidget() 
+        self.qpm_widget = QWidget()  
         self._tabs.addTab(
             self.qpm_widget, "QPM"
-        )  # physically add the qpm_widget to the tab widget
+        )  
 
-        self.phc_widget = QWidget()  # where all the PHC-related widgets will go
+        self.phc_widget = QWidget()  
         self._tabs.addTab(
-            self.phc_widget, "General segmentation"
-        )  # physically add the tab
+            self.phc_widget, "Phase contrast segmentation"
+        )  
 
+        # QPM WIDGET --------------------------------------------------------------
         # qpm settings
         self._wav = QPMSettingsSpinBox("Wavelength (µm):", parent=self)
         self._wav.setDecimals(3)
@@ -114,9 +116,6 @@ class QPMWidget(QWidget):
         )
         self._cam_pixel_size.setValue(6.5)
 
-        # self._num_channels = QPMSettingsSpinBox("Number of Channels:", parent=self)
-        # self._num_channels.setDecimals(0)
-        # self._num_channels.setValue(4)
 
         rotation_wdg = QWidget(self)
         rotation_wdg.setToolTip(
@@ -169,6 +168,23 @@ class QPMWidget(QWidget):
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
 
+        # analysis (QPM)
+        analysis_wdg = QWidget(self)
+        a_lbl = QLabel("Analysis to perform:", self)
+        a_lbl.setFixedWidth(fixed_w)
+        self._segment_cbox = QCheckBox("Segmentation", self)
+        self._segment_cbox.setChecked(True)
+        self._qpm_reconstruct_cbox = QCheckBox("QPM Reconstruction", self)
+        self._qpm_reconstruct_cbox.setChecked(True)
+        analysis_layout = QHBoxLayout(analysis_wdg)
+        analysis_layout.setContentsMargins(0, 0, 0, 0)
+        analysis_layout.setSpacing(10)
+        analysis_layout.addWidget(a_lbl)
+        analysis_layout.addWidget(self._qpm_reconstruct_cbox)
+        analysis_layout.addWidget(self._segment_cbox)
+        analysis_layout.addStretch()
+
+        # Segmentation (Both tabs) --------------------------------------------------------------
         # Phase settings -- diameter
         self._use_diam = QCheckBox("Use Diameter for Cellpose", parent=self)
         self._use_diam.setChecked(False)
@@ -238,31 +254,8 @@ class QPMWidget(QWidget):
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
 
-        # Analysis widget (QPM)
-        analysis_wdg = QWidget(self)
-        a_lbl = QLabel("Analysis to perform:", self)
-        a_lbl.setFixedWidth(fixed_w)
-        self._segment_cbox = QCheckBox("Segmentation", self)
-        self._segment_cbox.setChecked(True)
-        self._qpm_reconstruct_cbox = QCheckBox("QPM Reconstruction", self)
-        self._qpm_reconstruct_cbox.setChecked(True)
-        analysis_layout = QHBoxLayout(analysis_wdg)
-        analysis_layout.setContentsMargins(0, 0, 0, 0)
-        analysis_layout.setSpacing(10)
-        analysis_layout.addWidget(a_lbl)
-        analysis_layout.addWidget(self._qpm_reconstruct_cbox)
-        analysis_layout.addWidget(self._segment_cbox)
-        analysis_layout.addStretch()
 
-        # analysis (phase)
-        # analysis_phase_wdg = QWidget(self)
-        # analysis_p_layout = QHBoxLayout(analysis_phase_wdg)
-        # analysis_p_layout.setContentsMargins(0, 0, 0, 0)
-        # analysis_p_layout.setSpacing(10)
-        # analysis_p_layout.addStretch()
-
-        # bottom widget
-        # progress bar
+        # BOTTOM WIDGET -------------------------------------------------------------
         self._progress_bar = QProgressBar(self)
         self._progress_bar.setTextVisible(True)
         self._progress_bar.setStyleSheet(BAR_STYLESHEET)
@@ -284,6 +277,8 @@ class QPMWidget(QWidget):
         btns_layout.addWidget(self._progress_bar)
         run_btn.clicked.connect(self.run)
         cancel_btn.clicked.connect(self.cancel)
+
+        # LAYOUTS---------------------------------------------------------------------
 
         # main layout
         main_layout = QVBoxLayout(self)
@@ -311,37 +306,19 @@ class QPMWidget(QWidget):
         qpm_layout.addWidget(create_divider_line("Analysis"))
         qpm_layout.addWidget(analysis_wdg)
 
-        # phc layout tab
-        phc_layout = QVBoxLayout(self.phc_widget)
-        phc_layout.addWidget(create_divider_line("Segmentation settings"))
-        # phc_layout.addWidget(analysis_phase_wdg)
 
+        # Segmentation layout (main layout)
+        main_layout.addWidget(create_divider_line("Segmentation settings"))
         hbox_diam = QHBoxLayout()
         hbox_diam.addWidget(self._use_diam)
         hbox_diam.addWidget(self._diameter)
 
-        # phc_layout.addWidget(h_box_widget)
-        phc_layout.addLayout(hbox_diam)
-
-        phc_layout.addWidget(self._flow_threshold)
-        phc_layout.addWidget(self._cellprob_threshold)
-        phc_layout.addWidget(self._min_size)
-        phc_layout.addWidget(self._max_size_fraction)
-        phc_layout.addStretch()
-
-        # add an image widget after the stretch
-        img_label = QLabel(self)
-
-        arr = tifffile.imread(CAT_PATH / "cat.tif")
-
-        h, w = arr.shape
-        qimg = QImage(arr.data, w, h, w, QImage.Format.Format_Grayscale8)
-        pixmap = QPixmap.fromImage(qimg)
-        img_label.setPixmap(pixmap)
-        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        phc_layout.addWidget(img_label)
-
+        main_layout.addLayout(hbox_diam)
+        main_layout.addWidget(self._flow_threshold)
+        main_layout.addWidget(self._cellprob_threshold)
+        main_layout.addWidget(self._min_size)
+        main_layout.addWidget(self._max_size_fraction)
+        main_layout.addStretch()
         main_layout.addWidget(create_divider_line())
         main_layout.addLayout(btns_layout)
 
@@ -367,7 +344,8 @@ class QPMWidget(QWidget):
 
         self._cancel_requested = False
 
-        if self._tabs.currentIndex() == 0:  # QPM tab
+        # qpm tab
+        if self._tabs.currentIndex() == 0:  
             self._worker = create_worker(
                 self._run_qpm,
                 _start_thread=True,
@@ -378,7 +356,8 @@ class QPMWidget(QWidget):
                 },
             )
 
-        if self._tabs.currentIndex() == 1:  # phase contrast tab
+        # phase contrast tab
+        if self._tabs.currentIndex() == 1:  
             self._worker = create_worker(
                 self._run_phase_contrast,
                 _start_thread=True,
@@ -422,6 +401,62 @@ class QPMWidget(QWidget):
         self._cancel_requested = False
         self._progress_bar.setValue(0)
         self._progress_bar.setFormat("")
+
+    def _get_total_number_of_files(self) -> int:
+        """Get the total number of files to process."""
+        path = Path(self._input_dir.value())
+        total_files = 0
+        for item in path.iterdir():
+            if item.is_file() and item.suffix in {".tif", ".tiff"}:
+                total_files += 1
+            elif item.is_dir():
+                total_files += len(list(item.glob("*.tif")))
+        return total_files
+
+    def _segment_file(
+        self, image: np.ndarray | None, name: str, output_dir: Path
+    ) -> np.ndarray | None:
+        """Process a single TIF file."""
+        if image is None:
+            return None
+
+        print(f"\nProcessing {name}...")
+
+        if self._cancel_requested:
+            return None
+
+        # run segmentation
+        print("Running CellposeSAM segmentation...")
+
+        diameter = self._diameter.value() if self._use_diam.isChecked() else None
+        flow_threshold = self._flow_threshold.value()
+        cellprob_threshold = self._cellprob_threshold.value()
+        min_size = int(self._min_size.value())
+        max_size_fraction = self._max_size_fraction.value()
+
+        labels, _, _ = self._cp.eval(image, diameter=diameter, flow_threshold=flow_threshold,
+                                    cellprob_threshold=cellprob_threshold, min_size=min_size,
+                                    max_size_fraction=max_size_fraction)
+
+        # save the labels
+        print("Saving labels...")
+        io.imsave(output_dir / f"{name}_labels.tif", labels)
+        # This I would remove later on or make it optional.
+        if self._tabs.currentIndex() == 0:
+            fig, ax = plt.subplots(1, 2, figsize=(8, 4))
+            ax[0].imshow(image, cmap="gray")
+            ax[0].set_title("Phase Image")
+            ax[0].axis("off")
+            ax[1].imshow(labels, cmap="nipy_spectral")
+            ax[1].set_title("Labels")
+            ax[1].axis("off")
+            plt.tight_layout()
+            plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
+            #plt.close()
+        print(f"Saved labels for {name}")
+        return labels
+
+    # QPM PROCESSING METHODS-------------------------------------------------------
 
     def _run_qpm(self) -> Generator[dict, None, None]:
         """Run the QPM processing."""
@@ -726,6 +761,91 @@ class QPMWidget(QWidget):
         tifffile.imwrite(output_dir / f"frame_{name}_ph.tif", ph, imagej=True)
         print(f"Saved QPM results for {name}")
         return ph
+
+    # PHASE CONTRAST PROCESSING METHODS------------------------------------------------
+
+    def _run_phase_contrast(self) -> Generator[dict, None, None]:
+        """Run the Phase Contrast processing."""
+        if not self._input_dir.value():
+            return
+
+        if not self._output_dir.value():
+            yield {"type": "error", "message": "Output directory is not set."}
+            return
+
+
+        num_files = self._get_total_number_of_files()
+        failed_files = []  # Collect failed files
+
+
+        # Initialize progress bar
+        yield {"type": "init", "total": num_files}
+
+        current_file = 0
+        path = Path(self._input_dir.value())
+        for item in path.iterdir():
+            if self._cancel_requested:
+                return
+            
+            if item.is_file() and item.suffix in {".tif", ".tiff"}:
+                name = item.stem.replace(".ome", "")
+                image = tifffile.imread(item)
+
+                is_valid, error_msg = self._validate_phc_image(image)
+                if not is_valid:
+                    failed_files.append(f"{name}: {error_msg}")
+                    current_file += 1
+                    yield {"type": "update", "current": current_file}
+                    continue
+
+                out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
+                out.mkdir(parents=True, exist_ok=True)
+
+                seg = self._segment_file(image, name, out)
+                # if seg is not None: #TODO: This requires info on which channel to compute regionprobs on 
+                #     self._generate_csv_file(seg, image, name, out)
+
+                current_file += 1
+                yield {"type": "update", "current": current_file}
+
+            elif item.is_dir():
+                for tif_file in item.glob("*.tif"):
+                    name = tif_file.stem.replace(".ome", "")
+
+                    image = tifffile.imread(tif_file)
+
+                    is_valid, error_msg = self._validate_phc_image(image)
+                    if not is_valid:
+                        failed_files.append(f"{name}: {error_msg}")
+                        current_file += 1
+                        yield {"type": "update", "current": current_file}
+                        continue
+
+                    out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
+                    out.mkdir(parents=True, exist_ok=True)
+
+                    seg = self._segment_file(image, tif_file.stem, out)
+                    # if seg is not None:
+                    #     self._generate_csv_file(seg, image, tif_file.stem, out)
+                    
+
+                    current_file += 1
+                    yield {"type": "update", "current": current_file}
+
+    def _validate_phc_image(self, image: np.ndarray) -> tuple[bool, str]:
+        """Validate the input image.
+
+        Returns:
+            tuple: (is_valid, error_message)
+        """
+        if image.ndim != 2:
+            return (
+                False,
+                "The file should have 2 dimensions (H, W) for phase contrast images.",
+            )
+        return True, ""
+
+    # CSV GENERATION METHODS-------------------------------------------------------
 
     def _generate_csv_file(
         self, labels: np.ndarray, phase_image: np.ndarray, name: str, output_dir: Path
