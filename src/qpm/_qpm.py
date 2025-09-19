@@ -51,7 +51,7 @@ BAR_STYLESHEET = """
     }
 """
 
-TEST_DATA = Path(__file__).parent / "_test_data"
+TEST_DATA = Path(__file__).parent.parent.parent / "test_data"
 
 
 class QPMWidget(QWidget):
