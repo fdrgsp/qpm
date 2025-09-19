@@ -79,7 +79,40 @@ class BrowseWidget(QWidget):
 
 
 class QPMSettingsSpinBox(QWidget):
-    """A spin box widget for QPM settings."""
+    """A QSpinBox widget for QPM settings."""
+
+    def __init__(self, label: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._label = QLabel(label)
+        self._label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self._spin = QDoubleSpinBox()
+        self._spin.setRange(0, 100000)
+        self._spin.setDecimals(0)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+        layout.addWidget(self._label)
+        layout.addWidget(self._spin)
+
+    def value(self) -> int:
+        """Get the current value of the spin box."""
+        return int(self._spin.value())
+
+    def setValue(self, value: int) -> None:
+        """Set the value of the spin box."""
+        self._spin.setValue(value)
+
+    def setReadOnly(self, read_only: bool) -> None:
+        """Set the read-only state of the spin box."""
+        self._spin.setReadOnly(read_only)
+
+    def setSpecialValueText(self, text: str) -> None:
+        """Set the special value text for the spin box."""
+        self._spin.setSpecialValueText(text)
+
+
+class QPMSettingsDoubleSpinBox(QWidget):
+    """A QDoubleSpinBox widget for QPM settings."""
 
     def __init__(self, label: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
