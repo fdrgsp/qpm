@@ -27,6 +27,7 @@ from ._util import (
 )
 from ._dpc_algorithm import DPCSolver
 from superqt import QIconifyIcon
+from superqt import QCollapsible
 import tifffile
 from cellpose import io
 from superqt.utils import create_worker, GeneratorWorker, FunctionWorker
@@ -79,8 +80,9 @@ class QPMWidget(QWidget):
         self._tabwidget.addTab(self._phc_widget, "Phase Contrast Segmentation")
         lbl = QLabel("Run CellposeSAM segmentation on phase contrast images.")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout = QVBoxLayout(self._phc_widget)
-        layout.addWidget(lbl)
+        phc_layout = QVBoxLayout(self._phc_widget)
+        phc_layout.addWidget(lbl)
+        phc_layout.addStretch()
 
         # COMMON WIDGETS------------------------------------------------------------
         # input and output directories
@@ -98,7 +100,8 @@ class QPMWidget(QWidget):
         )
 
         # SEGMENTATION WIDGETS (common for both) ------------------------------------
-        self._cellpose_wdg = QGroupBox()
+        self._seg_group = QGroupBox(parent=self)
+        self._cellpose_wdg = QCollapsible("Cellpose Settings", parent=self._seg_group)
 
         # diameter
         self._diameter = QPMSettingsSpinBox("Diameter:", parent=self)
@@ -284,24 +287,32 @@ class QPMWidget(QWidget):
         # main layout
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(5)
+        main_layout.setSpacing(10)
         main_layout.addWidget(create_divider_line("Input/Output Directories"))
         main_layout.addWidget(self._input_dir)
         main_layout.addWidget(self._output_dir)
 
+        main_layout.addWidget(create_divider_line("CellposeSAM Settings"))
         # cellpose layout
-        cellpose_layout = QVBoxLayout(self._cellpose_wdg)
-        cellpose_layout.addWidget(create_divider_line("Cellpose Settings"))
+        cellpose_content = QWidget()
+        cellpose_layout = QVBoxLayout(cellpose_content)
+        cellpose_layout.setContentsMargins(0, 0, 0, 0)
+        cellpose_layout.setSpacing(5)
         cellpose_layout.addWidget(self._flow_threshold)
         cellpose_layout.addWidget(self._cellprob_threshold)
         cellpose_layout.addWidget(self._min_size)
-        cellpose_layout.addWidget(self._cellpose_wdg)
         cellpose_layout.addWidget(self._max_size_fraction)
         cellpose_layout.addWidget(self._tile_norm_blocksize)
         cellpose_layout.addWidget(self._batch_size)
         cellpose_layout.addWidget(self._diameter)
-        cellpose_layout.addStretch()
-        main_layout.addWidget(self._cellpose_wdg)
+        self._cellpose_wdg.setContent(cellpose_content)
+
+        # segmentation group layout
+        seg_group_layout = QVBoxLayout(self._seg_group)
+        seg_group_layout.setContentsMargins(0, 0, 0, 0)
+        seg_group_layout.setSpacing(0)
+        seg_group_layout.addWidget(self._cellpose_wdg)
+        main_layout.addWidget(self._seg_group)
 
         # tabwidget
         main_layout.addWidget(self._tabwidget)
@@ -322,6 +333,7 @@ class QPMWidget(QWidget):
         qpm_layout.addWidget(self._tikhonov_ph)
         qpm_layout.addWidget(create_divider_line("Analysis"))
         qpm_layout.addWidget(analysis_wdg)
+        qpm_layout.addStretch()
 
         # buttons layout
         main_layout.addLayout(btns_layout)
@@ -335,6 +347,9 @@ class QPMWidget(QWidget):
 
         # connections
         self._tabwidget.currentChanged.connect(self._rename_run_buttons)
+
+        # collapse cellpose settings by default
+        self._cellpose_wdg.collapse(animate=False)
 
     # PUBLIC METHODS-------------------------------------------------------------
 
@@ -383,7 +398,7 @@ class QPMWidget(QWidget):
         if self._tabwidget.currentIndex() == 0:
             self._run_btn.setText("Run QPM Processing")
         elif self._tabwidget.currentIndex() == 1:
-            self._run_btn.setText("Run PHC Segmentation")
+            self._run_btn.setText("Run PhC Segmentation")
 
     def _update_progress(self, progress_data: dict) -> None:
         """Update the progress bar."""
