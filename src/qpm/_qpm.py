@@ -104,7 +104,7 @@ class QPMWidget(QWidget):
         self._cellpose_wdg = QCollapsible("Cellpose Settings", parent=self._seg_group)
 
         # diameter
-        self._diameter = QPMSettingsSpinBox("Diameter:", parent=self)
+        self._diameter = QPMSettingsSpinBox("Diameter in px:", parent=self)
         self._diameter.setValue(0)
         self._diameter.setToolTip(
             "Cellpose rescales the image so objects match this diameter before "
