@@ -471,17 +471,20 @@ class QPMWidget(QWidget):
         print("Saving labels...")
         io.imsave(output_dir / f"{name}_labels.tif", labels)
         # This I would remove later on or make it optional.
-        if self._tabwidget.currentIndex() == 0:
-            fig, ax = plt.subplots(1, 2, figsize=(8, 4))
-            ax[0].imshow(image, cmap="gray")
-            ax[0].set_title("Phase Image")
-            ax[0].axis("off")
-            ax[1].imshow(labels, cmap="nipy_spectral")
-            ax[1].set_title("Labels")
-            ax[1].axis("off")
-            plt.tight_layout()
-            plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
-            # plt.close()
+        fig, ax = plt.subplots(1, 2, figsize=(8, 4))
+        ax[0].imshow(image, cmap="gray")
+        ax[0].set_title(
+            "QPM Image"
+            if self._tabwidget.currentIndex() == 0
+            else "Phase Contrast Image"
+        )
+        ax[0].axis("off")
+        ax[1].imshow(labels, cmap="nipy_spectral")
+        ax[1].set_title("Labels")
+        ax[1].axis("off")
+        plt.tight_layout()
+        plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
+        plt.close()
         print(f"Saved labels for {name}")
         return labels
 
