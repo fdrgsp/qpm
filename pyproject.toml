@@ -23,6 +23,7 @@ dependencies = [
     "scipy",
     "pandas",
     "scikit-image",
+    "rich",
 ]
 
 [project.optional-dependencies]
