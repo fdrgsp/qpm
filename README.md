@@ -1,5 +1,8 @@
 # qpm
 
+[![CI](https://github.com/fdrgsp/qpm/actions/workflows/ci.yml/badge.svg)](https://github.com/fdrgsp/qpm/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/fdrgsp/qpm/branch/main/graph/badge.svg)](https://codecov.io/gh/fdrgsp/qpm)
+
 A simple GUI to perform bacteria segmentation and qpm reconstruction.
 
 ## To launch the GUI

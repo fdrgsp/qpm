@@ -1,5 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
+
+# (removed unused tkinter import)
 import matplotlib.pyplot as plt
 from PyQt6.QtWidgets import (
     QWidget,
@@ -18,6 +20,7 @@ import numpy as np
 import pandas as pd
 import skimage
 from typing import Generator
+
 from ._util import (
     BrowseWidget,
     QPMSettingsDoubleSpinBox,
@@ -33,6 +36,7 @@ from cellpose import io
 from superqt.utils import create_worker, GeneratorWorker, FunctionWorker
 import traceback
 from ._segmentation import CellposeSAMSegmentation
+from rich import print
 
 RED = "#C33"
 GREEN = "#04CD04"
@@ -51,7 +55,7 @@ BAR_STYLESHEET = """
     }
 """
 
-TEST_DATA = Path(__file__).parent.parent.parent / "test_data"
+TEST_DATA = Path(__file__).parent.parent.parent / "tests" / "_test_data"
 
 
 class QPMWidget(QWidget):
@@ -367,8 +371,11 @@ class QPMWidget(QWidget):
         """Run the QPM processing in a separate thread."""
         self._cancel_requested = False
 
+        self._enable(False)
+
         # qpm tab
         if self._tabwidget.currentIndex() == 0:
+            print("\n-----------STARTING QPM PROCESSING-----------")
             self._worker = create_worker(
                 self._run_qpm,
                 _start_thread=True,
@@ -381,6 +388,7 @@ class QPMWidget(QWidget):
 
         # phase contrast tab
         if self._tabwidget.currentIndex() == 1:
+            print("\n-------STARTING PHASE CONTRAST SEGMENTATION-------")
             self._worker = create_worker(
                 self._run_phc,
                 _start_thread=True,
@@ -392,6 +400,16 @@ class QPMWidget(QWidget):
             )
 
     # COMMON PRIVATE METHODS-------------------------------------------------------------
+
+    def _enable(self, enable: bool) -> None:
+        """Enable or disable all input widgets."""
+        for widget in [
+            self._input_dir,
+            self._output_dir,
+            self._seg_group,
+            self._tabwidget,
+        ]:
+            widget.setEnabled(enable)
 
     def _rename_run_buttons(self) -> None:
         """Rename the run buttons based on the selected tab."""
@@ -420,7 +438,8 @@ class QPMWidget(QWidget):
     def _on_processing_finished(self) -> None:
         """Called when processing is finished."""
         self._cancel_requested = False
-        print("Processing completed!")
+        print("\n\n-------------PROCESSING COMPLETED!-------------")
+        self._enable(True)
 
     def _on_error(self, exc: Exception) -> None:
         print("Processing failed!", exc)
@@ -428,6 +447,7 @@ class QPMWidget(QWidget):
         self._cancel_requested = False
         self._progress_bar.setValue(0)
         self._progress_bar.setFormat("")
+        self._enable(True)
 
     def _get_total_number_of_files(self) -> int:
         """Get the total number of files to process."""
@@ -447,7 +467,7 @@ class QPMWidget(QWidget):
         if image is None:
             return None
 
-        print(f"\nProcessing {name}...")
+        print(f"\n*******************\nProcessing {name}...")
 
         if self._cancel_requested:
             return None
@@ -515,62 +535,23 @@ class QPMWidget(QWidget):
 
         current_file = 0
         path = Path(self._input_dir.value())
+
         for item in path.iterdir():
             if self._cancel_requested:
                 return
 
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
-                name = item.stem.replace(".ome", "")
-
-                image = tifffile.imread(item)
-
-                is_valid, error_msg = self._validate_qpm_image(image)
-                if not is_valid:
-                    failed_files.append(f"{name}: {error_msg}")
-                    current_file += 1
-                    yield {"type": "update", "current": current_file}
-                    continue
-
-                out = Path(self._output_dir.value()) / f"{name}{QPM_PROCESSED}"
-                out.mkdir(parents=True, exist_ok=True)
-
-                ph, seg = None, None
-                if self._qpm_reconstruct_cbox.isChecked():
-                    self._dpc_solver = None
-                    ph = self._reconstruct_qpm(image, name, rotations, out)
-                if self._segment_cbox.isChecked():
-                    seg = self._segment_file(ph, name, out)
-                if ph is not None and seg is not None:
-                    self._generate_csv_file(seg, ph, name, out)
-
+                ok, msg = self._process_qpm_tif(item, rotations)
+                if not ok:
+                    failed_files.append(msg)
                 current_file += 1
                 yield {"type": "update", "current": current_file}
 
             elif item.is_dir():
                 for tif_file in item.glob("*.tif"):
-                    name = tif_file.stem.replace(".ome", "")
-
-                    image = tifffile.imread(tif_file)
-
-                    is_valid, error_msg = self._validate_qpm_image(image)
-                    if not is_valid:
-                        failed_files.append(f"{name}: {error_msg}")
-                        current_file += 1
-                        yield {"type": "update", "current": current_file}
-                        continue
-
-                    out = Path(self._output_dir.value()) / f"{name}{QPM_PROCESSED}"
-                    out.mkdir(parents=True, exist_ok=True)
-
-                    ph, seg = None, None
-                    if self._qpm_reconstruct_cbox.isChecked():
-                        self._dpc_solver = None
-                        ph = self._reconstruct_qpm(image, tif_file.stem, rotations, out)
-                    if self._segment_cbox.isChecked():
-                        seg = self._segment_file(ph, tif_file.stem, out)
-                    if ph is not None and seg is not None:
-                        self._generate_csv_file(seg, ph, tif_file.stem, out)
-
+                    ok, msg = self._process_qpm_tif(tif_file, rotations)
+                    if not ok:
+                        failed_files.append(msg)
                     current_file += 1
                     yield {"type": "update", "current": current_file}
 
@@ -581,6 +562,36 @@ class QPMWidget(QWidget):
             )
             yield {"type": "validation_errors", "message": error_message}
 
+    def _process_qpm_tif(
+        self, tif_path: Path, rotations: list[float]
+    ) -> tuple[bool, str]:
+        """Process a single .tif file for QPM.
+
+        Returns:
+            (False, "{name}: {error_msg}") on validation failure or (True, "") on success.
+        """
+        name = tif_path.stem.replace(".ome", "")
+
+        image = tifffile.imread(tif_path)
+
+        is_valid, error_msg = self._validate_qpm_image(image)
+        if not is_valid:
+            return False, f"{name}: {error_msg}"
+
+        out = Path(self._output_dir.value()) / f"{name}{QPM_PROCESSED}"
+        out.mkdir(parents=True, exist_ok=True)
+
+        ph, seg = None, None
+        if self._qpm_reconstruct_cbox.isChecked():
+            self._dpc_solver = None
+            ph = self._reconstruct_qpm(image, name, rotations, out)
+        if self._segment_cbox.isChecked():
+            seg = self._segment_file(ph, name, out)
+        if ph is not None and seg is not None:
+            self._generate_csv_file(seg, ph, name, out)
+
+        return True, ""
+
     def _validate_qpm_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image.
 
@@ -588,7 +599,10 @@ class QPMWidget(QWidget):
             tuple: (is_valid, error_message)
         """
         if image.ndim != 3:
-            return False, "The file should have 3 dimensions (C, H, W)."
+            return (
+                False,
+                f"The file should have 3 dimensions (C, H, W), got {image.ndim}.",
+            )
         if image.shape[0] != 4:
             return False, "The file should have 4 channels, one per illumination angle."
         return True, ""
@@ -608,7 +622,7 @@ class QPMWidget(QWidget):
 
         Code form Laura Waller Lab: https://github.com/Waller-Lab/DPC/tree/master/python_code
         """
-        print(f"Reconstructing QPM for {name}...")
+        print(f"\n*******************\nReconstructing QPM for {name}...")
 
         # to remove
 
@@ -674,46 +688,46 @@ class QPMWidget(QWidget):
                 return
 
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
-                name = item.stem.replace(".ome", "")
-                image = tifffile.imread(item)
-
-                is_valid, error_msg = self._validate_phc_image(image)
-                if not is_valid:
-                    failed_files.append(f"{name}: {error_msg}")
-                    current_file += 1
-                    yield {"type": "update", "current": current_file}
-                    continue
-
-                out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
-                out.mkdir(parents=True, exist_ok=True)
-
-                self._segment_file(image, name, out)
-                # TODO: add any measurements/csv generation if needed
-
+                ok, msg = self._process_phc_tif(item)
+                if not ok:
+                    failed_files.append(msg)
                 current_file += 1
                 yield {"type": "update", "current": current_file}
 
             elif item.is_dir():
                 for tif_file in item.glob("*.tif"):
-                    name = tif_file.stem.replace(".ome", "")
-
-                    image = tifffile.imread(tif_file)
-
-                    is_valid, error_msg = self._validate_phc_image(image)
-                    if not is_valid:
-                        failed_files.append(f"{name}: {error_msg}")
-                        current_file += 1
-                        yield {"type": "update", "current": current_file}
-                        continue
-
-                    out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
-                    out.mkdir(parents=True, exist_ok=True)
-
-                    self._segment_file(image, tif_file.stem, out)
-                    # TODO: as above, add any measurements/csv generation if needed
-
+                    ok, msg = self._process_phc_tif(tif_file)
+                    if not ok:
+                        failed_files.append(msg)
                     current_file += 1
                     yield {"type": "update", "current": current_file}
+
+        # Report failed files at the end
+        if failed_files:
+            error_message = "The following files failed validation:\n\n" + "\n".join(
+                failed_files
+            )
+            yield {"type": "validation_errors", "message": error_message}
+
+    def _process_phc_tif(self, tif_path: Path) -> tuple[bool, str]:
+        """Process a single .tif file for Phase Contrast (segmentation).
+
+        Returns (False, "{name}: {error}") on validation failure or (True, "") on success.
+        """
+        name = tif_path.stem.replace(".ome", "")
+
+        image = tifffile.imread(tif_path)
+
+        is_valid, error_msg = self._validate_phc_image(image)
+        if not is_valid:
+            return False, f"{name}: {error_msg}"
+
+        out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
+        out.mkdir(parents=True, exist_ok=True)
+
+        # Run segmentation (returns labels but PHC flow uses only saving side-effects)
+        self._segment_file(image, name, out)
+        return True, ""
 
     def _validate_phc_image(self, image: np.ndarray) -> tuple[bool, str]:
         """Validate the input image.
