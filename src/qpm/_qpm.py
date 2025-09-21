@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import logging
 
 import matplotlib.pyplot as plt
 from PyQt6.QtWidgets import (
@@ -35,7 +36,9 @@ from cellpose import io
 from superqt.utils import create_worker, GeneratorWorker, FunctionWorker
 import traceback
 from ._segmentation import CellposeSAMSegmentation
-from rich import print
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 RED = "#C33"
 GREEN = "#04CD04"
@@ -62,6 +65,8 @@ class QPMWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
+
+        self.resize(500, 600)
 
         self.setWindowTitle("QPM Widget")
 
@@ -345,8 +350,6 @@ class QPMWidget(QWidget):
 
         # TO REMOVE, JUST FOR TESTING
         input = TEST_DATA / "input_qpm"
-        # input = TEST_DATA / "input_phc"
-        # input = "/Users/fdrgsp/Desktop/E_Coli_MP_1_ph_contrast/"
         output = TEST_DATA / "output"
         self._input_dir.setValue(input)
         self._output_dir.setValue(output)
@@ -379,7 +382,7 @@ class QPMWidget(QWidget):
 
         # qpm tab
         if self._tabwidget.currentIndex() == 0:
-            print("\n-----------STARTING QPM PROCESSING-----------")
+            logger.info("STARTING QPM PROCESSING")
             self._worker = create_worker(
                 self._run_qpm,
                 _start_thread=True,
@@ -392,7 +395,7 @@ class QPMWidget(QWidget):
 
         # phase contrast tab
         if self._tabwidget.currentIndex() == 1:
-            print("\n-------STARTING PHASE CONTRAST SEGMENTATION-------")
+            logger.info("STARTING PHASE CONTRAST SEGMENTATION")
             self._worker = create_worker(
                 self._run_phc,
                 _start_thread=True,
@@ -442,11 +445,11 @@ class QPMWidget(QWidget):
     def _on_processing_finished(self) -> None:
         """Called when processing is finished."""
         self._cancel_requested = False
-        print("\n\n-------------PROCESSING COMPLETED!-------------")
+        logger.info("PROCESSING COMPLETED SUCCESSFULLY")
         self._enable(True)
 
     def _on_error(self, exc: Exception) -> None:
-        print("Processing failed!", exc)
+        logger.error(f"Processing failed: {exc}")
         traceback.print_exception(type(exc), exc, exc.__traceback__)
         self._cancel_requested = False
         self._progress_bar.setValue(0)
@@ -483,13 +486,13 @@ class QPMWidget(QWidget):
         if image is None:
             return None
 
-        print(f"\n*******************\nProcessing {name}...")
+        logger.info(f"Processing {name}...")
 
         if self._cancel_requested:
             return None
 
         # run segmentation
-        print("Running CellposeSAM segmentation...")
+        logger.info("Running CellposeSAM segmentation...")
 
         self._cp.set_parameters(
             flow_threshold=self._flow_threshold.value(),
@@ -504,7 +507,7 @@ class QPMWidget(QWidget):
         labels, _ = self._cp.eval(image)
 
         # save the labels
-        print("Saving labels...")
+        logger.info("Saving labels...")
         io.imsave(output_dir / f"{name}_labels.tif", labels)
         # This I would remove later on or make it optional.
         fig, ax = plt.subplots(1, 2, figsize=(8, 4))
@@ -521,7 +524,7 @@ class QPMWidget(QWidget):
         plt.tight_layout()
         plt.savefig(output_dir / f"{name}_labels.png", dpi=150)
         plt.close()
-        print(f"Saved labels for {name}")
+        logger.info(f"Saved labels for {name}")
         return labels
 
     # QPM PRIVATE METHODS-------------------------------------------------------
@@ -691,10 +694,10 @@ class QPMWidget(QWidget):
 
         Code form Laura Waller Lab: https://github.com/Waller-Lab/DPC/tree/master/python_code
         """
-        print(f"\n*******************\nReconstructing QPM for {name}...")
+        logger.info(f"Reconstructing QPM for {name}...")
 
         if self._dpc_solver is None:
-            print("Initializing DPCSolver...")
+            logger.info("Initializing DPCSolver...")
             self._dpc_solver = DPCSolver(
                 image,
                 self._wav.value(),
@@ -714,21 +717,21 @@ class QPMWidget(QWidget):
 
         # solve DPC Deconvoltion Problems
         # parameters for Tikhonov regurlarization [u:absorption, p:phase]
-        # ((need to tune this based on SNR)
-        print("Solving DPC Deconvoltion Problems...")
+        # (need to tune this based on SNR)
+        logger.info("Solving DPC Deconvoltion Problems...")
         self._dpc_solver.setRegularizationParameters(
             reg_u=self._tikhonov_abs.value(), reg_p=self._tikhonov_ph.value()
         )
         dpc_result = self._dpc_solver.solve(method="Tikhonov")
 
-        print("Saving QPM results...")
+        logger.info("Saving QPM results...")
         abs = dpc_result[0].real.astype("float32")
         ph = dpc_result[0].imag.astype("float32")
         if self._invert_ph.isChecked():
             ph = -ph
         tifffile.imwrite(output_dir / f"frame_{name}_abs.tif", abs, imagej=True)
         tifffile.imwrite(output_dir / f"frame_{name}_ph.tif", ph, imagej=True)
-        print(f"Saved QPM results for {name}")
+        logger.info(f"Saved QPM results for {name}")
         return ph
 
     # PHASE CONTRAST PRIVATE METHODS------------------------------------------------
@@ -847,7 +850,6 @@ class QPMWidget(QWidget):
         out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
         out.mkdir(parents=True, exist_ok=True)
 
-        image = image[:50, :50]  # TO REMOVE
         self._segment_file(image, name, out)
         return True, ""
 
@@ -871,7 +873,7 @@ class QPMWidget(QWidget):
     ) -> None:
         """Generate a CSV file with measurements."""
         name = name.replace(".ome", "")
-        print(f"Generating CSV file for {name}...")
+        logger.info(f"Generating CSV file for {name}...")
 
         if self._cancel_requested:
             return None
@@ -893,9 +895,9 @@ class QPMWidget(QWidget):
         self._extract_and_add_dry_mass_calculation(labels, phase_image, props_dict)
 
         props_df = pd.DataFrame(props_dict)
-        print(f"Saving CSV file for {name}...")
+        logger.info(f"Saving CSV file for {name}...")
         props_df.to_csv(output_dir / f"{name}_measurements.csv", index=False)
-        print(f"Saved CSV file for {name}")
+        logger.info(f"Saved CSV file for {name}")
 
         # Temporary plots for testing
         props_df["dry_mass"].plot(
