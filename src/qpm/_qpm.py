@@ -66,6 +66,8 @@ class QPMWidget(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
 
+        self.resize(500, 600)
+
         self.setWindowTitle("QPM Widget")
 
         self._worker: FunctionWorker | GeneratorWorker | None = None
@@ -380,7 +382,7 @@ class QPMWidget(QWidget):
 
         # qpm tab
         if self._tabwidget.currentIndex() == 0:
-            logger.info("-----STARTING QPM PROCESSING-----")
+            logger.info("STARTING QPM PROCESSING")
             self._worker = create_worker(
                 self._run_qpm,
                 _start_thread=True,
@@ -393,7 +395,7 @@ class QPMWidget(QWidget):
 
         # phase contrast tab
         if self._tabwidget.currentIndex() == 1:
-            logger.info("-----STARTING PHASE CONTRAST SEGMENTATION-----")
+            logger.info("STARTING PHASE CONTRAST SEGMENTATION")
             self._worker = create_worker(
                 self._run_phc,
                 _start_thread=True,
@@ -443,7 +445,7 @@ class QPMWidget(QWidget):
     def _on_processing_finished(self) -> None:
         """Called when processing is finished."""
         self._cancel_requested = False
-        logger.info("-----PROCESSING COMPLETED SUCCESSFULLY-----")
+        logger.info("PROCESSING COMPLETED SUCCESSFULLY")
         self._enable(True)
 
     def _on_error(self, exc: Exception) -> None:
