@@ -30,9 +30,11 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+import logging
 import numpy as np
 from scipy.ndimage import uniform_filter
 
+logger = logging.getLogger(__name__)
 pi = np.pi
 naxis = np.newaxis
 
@@ -303,11 +305,10 @@ class DPCSolver:
                 z_k[:2, :, :] = _softThreshold(z_k[:2, :, :], self.tau_u / self.rho)
                 z_k[2:, :, :] = _softThreshold(z_k[2:, :, :], self.tau_p / self.rho)
                 u_k += D_k - z_k
-            print(
+            logger.debug(
                 "DPC deconvolution with TV regularization, iteration:{:d}/{:d}".format(
                     iteration + 1, tv_max_iter
                 ),
-                end="\r",
             )
 
         return absorption + 1.0j * phase
@@ -364,7 +365,7 @@ class DPCSolver:
                 fDy[2, 0] = 1.0
                 fDy = F(fDy)
             else:
-                print("TVDeconv does not support order higher than 3!")
+                logger.error("TVDeconv does not support order higher than 3!")
                 raise
 
             dpc_result = []

@@ -1,9 +1,11 @@
 from __future__ import annotations
-from PyQt6.QtWidgets import QApplication
-from qpm._qpm import QPMWidget
+import logging
 import sys
 import traceback
 from types import TracebackType
+
+from PyQt6.QtWidgets import QApplication
+from qpm._qpm import QPMWidget
 
 
 def _our_excepthook(
@@ -19,6 +21,13 @@ def _our_excepthook(
 
 def main() -> None:
     """Main function to run the QPM widget."""
+    # Set up logging configuration
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler()],
+    )
+
     app = QApplication(sys.argv)
     win = QPMWidget()
     win.show()
