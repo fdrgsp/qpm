@@ -1,7 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
 
-# (removed unused tkinter import)
 import matplotlib.pyplot as plt
 from PyQt6.QtWidgets import (
     QWidget,
@@ -70,6 +69,8 @@ class QPMWidget(QWidget):
         self._cancel_requested: bool = False
 
         self._dpc_solver: DPCSolver | None = None
+
+        self._skip_files: list[str] = []
 
         # segmentation
         self._cp = CellposeSAMSegmentation()
@@ -344,6 +345,8 @@ class QPMWidget(QWidget):
 
         # TO REMOVE, JUST FOR TESTING
         input = TEST_DATA / "input_qpm"
+        # input = TEST_DATA / "input_phc"
+        # input = "/Users/fdrgsp/Desktop/E_Coli_MP_1_ph_contrast/"
         output = TEST_DATA / "output"
         self._input_dir.setValue(input)
         self._output_dir.setValue(output)
@@ -370,6 +373,7 @@ class QPMWidget(QWidget):
     def run(self) -> None:
         """Run the QPM processing in a separate thread."""
         self._cancel_requested = False
+        self._skip_files.clear()
 
         self._enable(False)
 
@@ -449,16 +453,28 @@ class QPMWidget(QWidget):
         self._progress_bar.setFormat("")
         self._enable(True)
 
-    def _get_total_number_of_files(self) -> int:
-        """Get the total number of files to process."""
+    def _get_sorted_files_and_dirs(self) -> tuple[list[Path], int]:
+        """Get sorted list of files and directories to process, plus total file count.
+
+        Returns:
+            tuple: (sorted_items, total_files) where sorted_items contains both
+                   files and directories sorted by name, and total_files is the
+                   count of .tif/.tiff files that will be processed.
+        """
         path = Path(self._input_dir.value())
+        items = sorted(path.iterdir(), key=lambda x: x.name)
         total_files = 0
-        for item in path.iterdir():
+
+        for item in items:
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
                 total_files += 1
             elif item.is_dir():
-                total_files += len(list(item.glob("*.tif")))
-        return total_files
+                # Count both .tif and .tiff files in subdirectories
+                total_files += len(list(item.glob("*.tif"))) + len(
+                    list(item.glob("*.tiff"))
+                )
+
+        return items, total_files
 
     def _segment_file(
         self, image: np.ndarray | None, name: str, output_dir: Path
@@ -524,7 +540,7 @@ class QPMWidget(QWidget):
             yield {"type": "error", "message": "Invalid rotation angles format."}
             return
 
-        num_files = self._get_total_number_of_files()
+        sorted_items, num_files = self._get_sorted_files_and_dirs()
         failed_files = []  # Collect failed files
 
         # Initialize progress bar
@@ -534,26 +550,32 @@ class QPMWidget(QWidget):
         # self._dpc_solver = None
 
         current_file = 0
-        path = Path(self._input_dir.value())
 
-        for item in path.iterdir():
+        for item in sorted_items:
             if self._cancel_requested:
                 return
 
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
-                ok, msg = self._process_qpm_tif(item, rotations)
-                if not ok:
-                    failed_files.append(msg)
-                current_file += 1
-                yield {"type": "update", "current": current_file}
+                # Process and yield progress updates in real-time
+                for progress_update in self._process_qpm_tif_generator(item, rotations):
+                    if progress_update["type"] == "progress":
+                        current_file += 1
+                        yield {"type": "update", "current": current_file}
+                    elif progress_update["type"] == "error":
+                        failed_files.append(progress_update["message"])
 
             elif item.is_dir():
-                for tif_file in item.glob("*.tif"):
-                    ok, msg = self._process_qpm_tif(tif_file, rotations)
-                    if not ok:
-                        failed_files.append(msg)
-                    current_file += 1
-                    yield {"type": "update", "current": current_file}
+                tif_files = list(item.glob("*.tif")) + list(item.glob("*.tiff"))
+                for tif_file in sorted(tif_files, key=lambda x: x.name):
+                    # Process and yield progress updates in real-time
+                    for progress_update in self._process_qpm_tif_generator(
+                        tif_file, rotations
+                    ):
+                        if progress_update["type"] == "progress":
+                            current_file += 1
+                            yield {"type": "update", "current": current_file}
+                        elif progress_update["type"] == "error":
+                            failed_files.append(progress_update["message"])
 
         # Report failed files at the end
         if failed_files:
@@ -562,18 +584,65 @@ class QPMWidget(QWidget):
             )
             yield {"type": "validation_errors", "message": error_message}
 
-    def _process_qpm_tif(
+    def _process_qpm_tif_generator(
         self, tif_path: Path, rotations: list[float]
-    ) -> tuple[bool, str]:
-        """Process a single .tif file for QPM.
+    ) -> Generator[dict, None, None]:
+        """Process a single .tif file for QPM with real-time progress updates.
 
-        Returns:
-            (False, "{name}: {error_msg}") on validation failure or (True, "") on success.
+        Yields progress updates for each position processed.
         """
         name = tif_path.stem.replace(".ome", "")
 
-        image = tifffile.imread(tif_path)
+        with tifffile.TiffFile(tif_path) as tif:
+            positions = tif.series
 
+            if not positions:
+                # simple TIFF files (no OME metadata)
+                image = tifffile.imread(tif_path)
+                ok, msg = self._process_single_qpm_image(image, name, rotations)
+                if not ok:
+                    yield {"type": "error", "message": msg}
+                else:
+                    yield {"type": "progress"}
+
+            elif len(positions) == 1:
+                # OME-TIFF with single position
+                image = positions[0].asarray()
+                ok, msg = self._process_single_qpm_image(image, name, rotations)
+                if not ok:
+                    yield {"type": "error", "message": msg}
+                else:
+                    yield {"type": "progress"}
+
+            else:
+                # OME-TIFF with multiple positions - yield progress for each position
+                for pos in positions:
+                    if self._cancel_requested:
+                        break
+
+                    self._skip_files.append(pos.name)
+                    image = pos.asarray()
+
+                    ok, msg = self._process_single_qpm_image(image, pos.name, rotations)
+                    if not ok:
+                        yield {"type": "error", "message": msg}
+                        break
+                    else:
+                        yield {"type": "progress"}
+
+    def _process_single_qpm_image(
+        self, image: np.ndarray, name: str, rotations: list[float]
+    ) -> tuple[bool, str]:
+        """Process a single QPM image.
+
+        Args:
+            image: The image array to process
+            name: The name to use for output files
+            rotations: The rotation angles for QPM reconstruction
+
+        Returns:
+            (False, "{name}: {error}") on validation failure or (True, "") on success.
+        """
         is_valid, error_msg = self._validate_qpm_image(image)
         if not is_valid:
             return False, f"{name}: {error_msg}"
@@ -624,8 +693,6 @@ class QPMWidget(QWidget):
         """
         print(f"\n*******************\nReconstructing QPM for {name}...")
 
-        # to remove
-
         if self._dpc_solver is None:
             print("Initializing DPCSolver...")
             self._dpc_solver = DPCSolver(
@@ -675,32 +742,40 @@ class QPMWidget(QWidget):
             yield {"type": "error", "message": "Output directory is not set."}
             return
 
-        num_files = self._get_total_number_of_files()
+        sorted_items, num_files = self._get_sorted_files_and_dirs()
         failed_files = []  # Collect failed files
 
         # Initialize progress bar
         yield {"type": "init", "total": num_files}
 
         current_file = 0
-        path = Path(self._input_dir.value())
-        for item in path.iterdir():
+        for item in sorted_items:
             if self._cancel_requested:
                 return
 
             if item.is_file() and item.suffix in {".tif", ".tiff"}:
-                ok, msg = self._process_phc_tif(item)
-                if not ok:
-                    failed_files.append(msg)
-                current_file += 1
-                yield {"type": "update", "current": current_file}
+                if item.stem.replace(".ome", "") in self._skip_files:
+                    continue
+                # process and yield progress updates in real-time
+                for progress_update in self._process_phc_tif_generator(item):
+                    if progress_update["type"] == "progress":
+                        current_file += 1
+                        yield {"type": "update", "current": current_file}
+                    elif progress_update["type"] == "error":
+                        failed_files.append(progress_update["message"])
 
             elif item.is_dir():
-                for tif_file in item.glob("*.tif"):
-                    ok, msg = self._process_phc_tif(tif_file)
-                    if not ok:
-                        failed_files.append(msg)
-                    current_file += 1
-                    yield {"type": "update", "current": current_file}
+                tif_files = list(item.glob("*.tif")) + list(item.glob("*.tiff"))
+                for tif_file in sorted(tif_files, key=lambda x: x.name):
+                    if tif_file.stem.replace(".ome", "") in self._skip_files:
+                        continue
+                    # process and yield progress updates in real-time
+                    for progress_update in self._process_phc_tif_generator(tif_file):
+                        if progress_update["type"] == "progress":
+                            current_file += 1
+                            yield {"type": "update", "current": current_file}
+                        elif progress_update["type"] == "error":
+                            failed_files.append(progress_update["message"])
 
         # Report failed files at the end
         if failed_files:
@@ -709,15 +784,62 @@ class QPMWidget(QWidget):
             )
             yield {"type": "validation_errors", "message": error_message}
 
-    def _process_phc_tif(self, tif_path: Path) -> tuple[bool, str]:
-        """Process a single .tif file for Phase Contrast (segmentation).
+    def _process_phc_tif_generator(self, tif_path: Path) -> Generator[dict, None, None]:
+        """Process a single .tif file for Phase Contrast with real-time progress updates.
 
-        Returns (False, "{name}: {error}") on validation failure or (True, "") on success.
+        Yields progress updates for each position processed.
         """
         name = tif_path.stem.replace(".ome", "")
 
-        image = tifffile.imread(tif_path)
+        with tifffile.TiffFile(tif_path) as tif:
+            positions = tif.series
 
+            if not positions:
+                # simple TIFF files (no OME metadata)
+                image = tifffile.imread(tif_path)
+                ok, msg = self._process_single_phc_image(image, name)
+                if not ok:
+                    yield {"type": "error", "message": msg}
+                else:
+                    yield {"type": "progress"}
+
+            elif len(positions) == 1:
+                # OME-TIFF with single position
+                image = positions[0].asarray()
+                ok, msg = self._process_single_phc_image(image, name)
+                if not ok:
+                    yield {"type": "error", "message": msg}
+                else:
+                    yield {"type": "progress"}
+
+            else:
+                # OME-TIFF with multiple positions - yield progress for each position
+                for pos in positions:
+                    if self._cancel_requested:
+                        break
+
+                    self._skip_files.append(pos.name)
+                    image = pos.asarray()
+
+                    ok, msg = self._process_single_phc_image(image, pos.name)
+                    if not ok:
+                        yield {"type": "error", "message": msg}
+                        break
+                    else:
+                        yield {"type": "progress"}
+
+    def _process_single_phc_image(
+        self, image: np.ndarray, name: str
+    ) -> tuple[bool, str]:
+        """Process a single phase contrast image.
+
+        Args:
+            image: The image array to process
+            name: The name to use for output files
+
+        Returns:
+            (False, "{name}: {error}") on validation failure or (True, "") on success.
+        """
         is_valid, error_msg = self._validate_phc_image(image)
         if not is_valid:
             return False, f"{name}: {error_msg}"
@@ -725,7 +847,7 @@ class QPMWidget(QWidget):
         out = Path(self._output_dir.value()) / f"{name}{PHC_PROCESSED}"
         out.mkdir(parents=True, exist_ok=True)
 
-        # Run segmentation (returns labels but PHC flow uses only saving side-effects)
+        image = image[:50, :50]  # TO REMOVE
         self._segment_file(image, name, out)
         return True, ""
 
