@@ -5,17 +5,24 @@
 
 A simple GUI to perform bacteria segmentation and qpm reconstruction.
 
-## To launch the GUI
+<br>
 
-Install [git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/getting-started/installation/) and then run:
+## Installation
+ Make sure you have [git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed and then follow the instructions below.
+
+ <br>
+
+### To launch the GUI
 
 ```bash
 uvx git+https://github.com/fdrgsp/qpm
 ```
 
+`NOTE`: GPU on Apple Silicon is automatically detected. If using CUDA and Windows, see below.
+
 <br>
 
-## GPU & CUDA on Windows
+### To launch the GUI with GPU & CUDA on Windows
 
 To use the GPU version of `qpm` on Windows, you need to have a compatible NVIDIA GPU and the corresponding CUDA toolkit installed.
 
@@ -23,7 +30,7 @@ To use the GPU version of `qpm` on Windows, you need to have a compatible NVIDIA
 
 <br>
 
-### Option 1: Using `uvx` (recommended)
+#### Option 1: Using `uvx` (recommended)
 
 This is the easiest way to install `qpm` on Windows with CUDA GPU support:
 
@@ -35,7 +42,7 @@ uvx --index https://download.pytorch.org/whl/cu126 git+https://github.com/fdrgsp
 
 <br>
 
-### Option 2: Manual installation
+#### Option 2: Manual installation
 
 You need to go through the following steps **only once**, just the first time you install `qpm`:
 
