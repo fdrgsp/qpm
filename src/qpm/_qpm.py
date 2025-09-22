@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QCheckBox,
     QProgressBar,
-    QGroupBox,
 )
 from PyQt6.QtCore import Qt
 import numpy as np
@@ -30,7 +29,6 @@ from ._util import (
 )
 from ._dpc_algorithm import DPCSolver
 from superqt import QIconifyIcon
-from superqt import QCollapsible
 import tifffile
 from cellpose import io
 from superqt.utils import create_worker, GeneratorWorker, FunctionWorker
@@ -77,23 +75,6 @@ class QPMWidget(QWidget):
 
         self._skip_files: list[str] = []
 
-        # segmentation
-        self._cp = CellposeSAMSegmentation()
-
-        # TABS WIDGET --------------------------------------------------------------
-        self._tabwidget = QTabWidget()
-
-        self._qpm_widget = QWidget()
-        self._tabwidget.addTab(self._qpm_widget, "QPM")
-
-        self._phc_widget = QWidget()
-        self._tabwidget.addTab(self._phc_widget, "Phase Contrast Segmentation")
-        lbl = QLabel("Run CellposeSAM segmentation on phase contrast images.")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        phc_layout = QVBoxLayout(self._phc_widget)
-        phc_layout.addWidget(lbl)
-        phc_layout.addStretch()
-
         # COMMON WIDGETS------------------------------------------------------------
         # input and output directories
         self._input_dir = BrowseWidget(
@@ -109,72 +90,24 @@ class QPMWidget(QWidget):
             is_dir=True,
         )
 
-        # SEGMENTATION WIDGETS (common for both) ------------------------------------
-        self._seg_group = QGroupBox(parent=self)
-        self._cellpose_wdg = QCollapsible("Cellpose Settings", parent=self._seg_group)
+        # SEGMENTATION WIDGETS (common for both) -----------------------------------
+        self._cp_wdg = CellposeSAMSegmentation(self)
 
-        # diameter
-        self._diameter = QPMSettingsSpinBox("Diameter in px:", parent=self)
-        self._diameter.setValue(0)
-        self._diameter.setToolTip(
-            "Cellpose rescales the image so objects match this diameter before "
-            "segmentation (model trained for ~30 px). If set to 0 px (default), Cellpose "
-            "will estimate it."
-        )
+        # TABS WIDGET --------------------------------------------------------------
+        self._tabwidget = QTabWidget()
 
-        # flow threshold
-        self._flow_threshold = QPMSettingsDoubleSpinBox("Flow Threshold:", parent=self)
-        self._flow_threshold.setDecimals(2)
-        self._flow_threshold.setValue(0.4)
-        self._flow_threshold.setToolTip(
-            "Flow error threshold (all cells with errors below threshold are kept) (not used for 3D). Defaults to 0.4"
-        )
+        self._qpm_widget = QWidget()
+        self._tabwidget.addTab(self._qpm_widget, "QPM")
 
-        # cellprob threshold
-        self._cellprob_threshold = QPMSettingsDoubleSpinBox(
-            "Cellprob Threshold:", parent=self
-        )
-        self._cellprob_threshold.setDecimals(2)
-        self._cellprob_threshold.setValue(0.0)
-        self._cellprob_threshold.setToolTip(
-            "All pixels with value above threshold kept for masks, decrease to find more and larger masks. Defaults to 0.0."
-        )
+        self._phc_widget = QWidget()
+        self._tabwidget.addTab(self._phc_widget, "Phase Contrast Segmentation")
+        lbl = QLabel("Run CellposeSAM segmentation on phase contrast images.")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        phc_layout = QVBoxLayout(self._phc_widget)
+        phc_layout.addWidget(lbl)
+        phc_layout.addStretch()
 
-        # min size
-        self._min_size = QPMSettingsSpinBox("Min Size (pixels):", parent=self)
-        self._min_size.setValue(15)
-        self._min_size.setToolTip(
-            "All ROIs below this size, in pixels, will be discarded. Defaults to 15."
-        )
-
-        # max size fraction
-        self._max_size_fraction = QPMSettingsDoubleSpinBox(
-            "Max Size Fraction:", parent=self
-        )
-        self._max_size_fraction.setDecimals(2)
-        self._max_size_fraction.setValue(0.4)
-        self._max_size_fraction.setToolTip(
-            "Masks larger than max_size_fraction of total image size are removed. Default is 0.4."
-        )
-
-        # tile norm blocksize
-        self._tile_norm_blocksize = QPMSettingsSpinBox(
-            "Tile Norm Blocksize:", parent=self
-        )
-        self._tile_norm_blocksize.setValue(0)
-        self._tile_norm_blocksize.setToolTip(
-            "Block size for tile normalization. Defaults to 0."
-        )
-
-        # batch size
-        self._batch_size = QPMSettingsSpinBox("Batch Size:", parent=self)
-        self._batch_size.setValue(8)
-        self._batch_size.setToolTip(
-            "Number of images to process in a batch. "
-            "Increase if you have more memory. Defaults to 8."
-        )
-
-        # QPM WIDGET --------------------------------------------------------------
+        # QPM WIDGET ---------------------------------------------------------------
         # qpm settings
         self._wav = QPMSettingsDoubleSpinBox("Wavelength (µm):", parent=self)
         self._wav.setDecimals(3)
@@ -264,6 +197,9 @@ class QPMWidget(QWidget):
         self._cancel_btn.clicked.connect(self.cancel)
 
         # LABELS STYLING -------------------------------------------------------------
+        dir_size = self._output_dir._label.sizeHint().width()
+        self._input_dir._label.setFixedWidth(dir_size)
+
         fixed_w = self._na_in._label.sizeHint().width()
         for widget in [
             self._wav,
@@ -271,23 +207,13 @@ class QPMWidget(QWidget):
             self._na,
             self._na_in,
             self._cam_pixel_size,
-            # self._num_channels,
             self._tikhonov_abs,
             self._tikhonov_ph,
-            self._diameter,
-            self._flow_threshold,
-            self._cellprob_threshold,
-            self._min_size,
-            self._max_size_fraction,
-            self._tile_norm_blocksize,
-            self._batch_size,
         ]:
             assert isinstance(widget, QPMSettingsDoubleSpinBox) or isinstance(
                 widget, QPMSettingsSpinBox
             )
             widget._label.setFixedWidth(fixed_w)
-        self._input_dir._label.setFixedWidth(fixed_w)
-        self._output_dir._label.setFixedWidth(fixed_w)
         a_lbl.setFixedWidth(fixed_w)
         r_lbl.setFixedWidth(fixed_w)
         i_lbl.setFixedWidth(fixed_w)
@@ -302,27 +228,9 @@ class QPMWidget(QWidget):
         main_layout.addWidget(self._input_dir)
         main_layout.addWidget(self._output_dir)
 
+        # CellposeSAM
         main_layout.addWidget(create_divider_line("CellposeSAM Settings"))
-        # cellpose layout
-        cellpose_content = QWidget()
-        cellpose_layout = QVBoxLayout(cellpose_content)
-        cellpose_layout.setContentsMargins(0, 0, 0, 0)
-        cellpose_layout.setSpacing(5)
-        cellpose_layout.addWidget(self._flow_threshold)
-        cellpose_layout.addWidget(self._cellprob_threshold)
-        cellpose_layout.addWidget(self._min_size)
-        cellpose_layout.addWidget(self._max_size_fraction)
-        cellpose_layout.addWidget(self._tile_norm_blocksize)
-        cellpose_layout.addWidget(self._batch_size)
-        cellpose_layout.addWidget(self._diameter)
-        self._cellpose_wdg.setContent(cellpose_content)
-
-        # segmentation group layout
-        seg_group_layout = QVBoxLayout(self._seg_group)
-        seg_group_layout.setContentsMargins(0, 0, 0, 0)
-        seg_group_layout.setSpacing(0)
-        seg_group_layout.addWidget(self._cellpose_wdg)
-        main_layout.addWidget(self._seg_group)
+        main_layout.addWidget(self._cp_wdg)
 
         # tabwidget
         main_layout.addWidget(self._tabwidget)
@@ -335,7 +243,6 @@ class QPMWidget(QWidget):
         qpm_layout.addWidget(self._na)
         qpm_layout.addWidget(self._na_in)
         qpm_layout.addWidget(self._cam_pixel_size)
-        # qpm_layout.addWidget(self._num_channels)
         qpm_layout.addWidget(rotation_wdg)
         qpm_layout.addWidget(invert_ph)
         qpm_layout.addWidget(create_divider_line("QPM Tikhonov Settings"))
@@ -357,9 +264,6 @@ class QPMWidget(QWidget):
 
         # connections
         self._tabwidget.currentChanged.connect(self._rename_run_buttons)
-
-        # collapse cellpose settings by default
-        self._cellpose_wdg.collapse(animate=False)
 
     # PUBLIC METHODS-------------------------------------------------------------
 
@@ -413,8 +317,8 @@ class QPMWidget(QWidget):
         for widget in [
             self._input_dir,
             self._output_dir,
-            self._seg_group,
             self._tabwidget,
+            self._cp_wdg,
         ]:
             widget.setEnabled(enable)
 
@@ -494,17 +398,7 @@ class QPMWidget(QWidget):
         # run segmentation
         logger.info("Running CellposeSAM segmentation...")
 
-        self._cp.set_parameters(
-            flow_threshold=self._flow_threshold.value(),
-            cellprob_threshold=self._cellprob_threshold.value(),
-            max_size_fraction=self._max_size_fraction.value(),
-            min_size=self._min_size.value(),
-            tile_norm_blocksize=self._tile_norm_blocksize.value(),
-            batch_size=self._batch_size.value(),
-            diameter=self._diameter.value() or None,
-        )
-
-        labels, _ = self._cp.eval(image)
+        labels, _, _ = self._cp_wdg.segment(image)
 
         # save the labels
         logger.info("Saving labels...")
@@ -705,7 +599,6 @@ class QPMWidget(QWidget):
                 self._na_in.value(),
                 self._cam_pixel_size.value() / self._mag.value(),
                 rotations,
-                # dpc_num=int(self._num_channels.value()),
                 dpc_num=4,
             )
         else:
