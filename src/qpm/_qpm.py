@@ -567,7 +567,8 @@ class QPMWidget(QWidget):
         if image.ndim != 3:
             return (
                 False,
-                f"The file should have 3 dimensions (C, H, W), got {image.ndim}.",
+                f"The file should have 3 dimensions (C, H, W), got {image.ndim} "
+                f"(shape: {image.shape}).",
             )
         if image.shape[0] != 4:
             return False, "The file should have 4 channels, one per illumination angle."
