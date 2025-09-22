@@ -4,7 +4,7 @@ import tifffile
 from pathlib import Path
 import pytest
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QWidget
 
 import qpm._qpm as qpm_mod
 from qpm._qpm import QPMWidget, QPM_PROCESSED, PHC_PROCESSED
@@ -13,8 +13,9 @@ from qpm._qpm import QPMWidget, QPM_PROCESSED, PHC_PROCESSED
 _app = QApplication.instance() or QApplication(sys.argv)
 
 
-class DummySegmentation:
+class DummySegmentation(QWidget):
     def __init__(self, *a, **k):
+        super().__init__()
         self.params = {}
 
     def set_parameters(self, **kwargs):
@@ -23,13 +24,17 @@ class DummySegmentation:
     def eval(self, image):
         # return a label image with same H,W (support either 2D or 3D input)
         if image is None:
-            return None, None
+            return None, None, None
         if image.ndim == 3:
             h, w = image.shape[1], image.shape[2]
         else:
             h, w = image.shape[0], image.shape[1]
         labels = np.zeros((h, w), dtype=np.int16)
-        return labels, None
+        return labels, None, None
+
+    def segment(self, image):
+        """Mock segment method to match the CellposeSAMSegmentation interface."""
+        return self.eval(image)
 
 
 @pytest.fixture(autouse=True)
@@ -383,14 +388,14 @@ def test_enable_disable_widgets(tmp_path: Path):
     w._enable(False)
     assert not w._input_dir.isEnabled()
     assert not w._output_dir.isEnabled()
-    assert not w._seg_group.isEnabled()
+    assert not w._cp_wdg.isEnabled()
     assert not w._tabwidget.isEnabled()
 
     # Test enable
     w._enable(True)
     assert w._input_dir.isEnabled()
     assert w._output_dir.isEnabled()
-    assert w._seg_group.isEnabled()
+    assert w._cp_wdg.isEnabled()
     assert w._tabwidget.isEnabled()
 
 
@@ -452,16 +457,18 @@ def test_cancel_processing(tmp_path: Path):
             self.quit_called = True
 
     # Test cancel with running worker
-    w._worker = MockWorker(is_running=True)
+    mock_worker = MockWorker(is_running=True)
+    w._worker = mock_worker  # type: ignore
     w.cancel()
     assert w._cancel_requested is True
-    assert w._worker.quit_called is True
+    assert mock_worker.quit_called is True
     assert w._progress_bar.value() == 0
     assert w._progress_bar.format() == ""
 
     # Test cancel with non-running worker
     w._cancel_requested = False
-    w._worker = MockWorker(is_running=False)
+    mock_worker2 = MockWorker(is_running=False)
+    w._worker = mock_worker2  # type: ignore
     w.cancel()
     assert w._cancel_requested is False  # Should not change
 
